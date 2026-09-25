@@ -4,7 +4,7 @@ TypeSafe의 판단 전용 모델 **Jev**에게 매매 판단을 맡겨 한국·�
 기간, 종목, Jev에게 묻는 방식(전략), effort, 매매 주기를 정하면 과거 시세로 백테스트를 돌립니다.
 결과는 DB에 쌓이고 **랭킹**과 **전략 분석**으로 누가 어떤 조합으로 가장 많이 벌었는지 보여 줍니다.
 
-**바로 써 보기**: https://sunghoonkim-ski.github.io/jev-trading-arena/ (화면, GitHub Pages) · API https://jev-trading-arena.vercel.app (Vercel)
+**바로 써 보기**: https://jev-trading-arena.vercel.app
 
 ## 문제 이해: 누구의 어떤 불편을 해결하나
 
@@ -31,7 +31,7 @@ TypeSafe의 판단 전용 모델 **Jev**에게 매매 판단을 맡겨 한국·�
 ## 사용 편의성: 준비 없이 쓸 수 있나
 
 - **설치 한 번**: Node.js 22.18 이상에서 `npm install` 후 `npm start`로 끝납니다. 별도 DB 서버가 필요 없습니다(SQLite 파일 자동 생성).
-- **설치 없이 웹으로**: GitHub Pages와 Vercel에 배포돼 있어 브라우저만 있으면 됩니다.
+- **설치 없이 웹으로**: Vercel에 배포돼 있어 브라우저만 있으면 됩니다.
 - **API 키 없이도 동작**: TypeSafe 키가 없으면 Mock 엔진으로 전체 흐름을 체험할 수 있습니다. 키를 넣으면 실제 Jev로 바뀝니다. 두 결과는 랭킹에서 분리됩니다.
 - **기본값이 준비돼 있음**: 인기 종목 칩, "최근 1년" 같은 기간 버튼, 시장별 기본 자본금과 수수료·세금이 미리 설정돼 있습니다. 닉네임만 넣고 실행을 누르면 됩니다.
 - **반복 조작 없음**: 여러 전략을 한 번에 실행합니다. 결과는 실시간으로 갱신되고, 닉네임은 브라우저에 기억됩니다. 분봉은 서버가 알아서 주기적으로 수집합니다.
@@ -59,12 +59,13 @@ TYPESAFE_API_KEY=... npm start             # 실제 Jev 사용
 ## 배포
 
 ```
-GitHub Pages (정적 화면)  ──API 호출(CORS)──▶  Vercel 서버리스 함수 (/api/*)  ──▶  Turso (libSQL, 원격 SQLite)
-                                              └ 일일 크론: 분봉 수집 + 멈춘 실행 복구
+브라우저 ──▶ Vercel ─┬─ 정적 화면 (public/)
+                    └─ 서버리스 함수 (/api/*, 서울 icn1) ──▶ Turso (libSQL, 원격 SQLite)
+                         └ 일일 크론: 분봉 수집 + 멈춘 실행 복구
 ```
 
 - **Vercel**: `npm run build:vercel`이 Build Output API 산출물(화면 + API 함수 + 크론)을 만듭니다. 바이낸스 API가 미국 IP를 막기 때문에 함수는 서울(icn1) 리전에서 실행합니다. 원본 틱 저장소는 로컬 전용이라 배포 환경에서는 틱 체결이 꺼집니다. 백테스트는 응답 후 `waitUntil`로 끝까지 실행합니다. 함수가 시간 초과로 끊긴 실행은 크론이 다시 돌립니다.
-- **GitHub Pages**: `main`에 `public/`이 바뀌면 워크플로가 배포합니다. 저장소 변수 `API_BASE_URL`에 Vercel 주소를 넣으면 화면이 그 API를 씁니다.
+- **자동 배포**: GitHub 저장소가 Vercel 프로젝트에 연결돼 있습니다. `main`에 푸시하거나 병합하면 프로덕션에, PR 브랜치에 푸시하면 미리보기 주소에 자동으로 배포됩니다. 미리보기도 같은 Turso DB를 쓰므로 PR 미리보기에서 만든 실행 기록은 운영 랭킹에 함께 보입니다.
 - **DB**: 로컬은 SQLite 파일, 배포는 Turso를 씁니다. SQL과 코드는 같습니다(`@libsql/client`).
 
 Vercel 프로젝트 환경 변수:
@@ -75,16 +76,16 @@ Vercel 프로젝트 환경 변수:
 | `TURSO_AUTH_TOKEN` | Turso DB 토큰 |
 | `CRON_SECRET` | 크론 호출 인증용 임의 문자열 (Vercel이 자동으로 헤더에 넣음) |
 | `TYPESAFE_API_KEY` | 선택. 있으면 실제 Jev 사용 |
-| `ALLOWED_ORIGINS` | 선택. 기본 `*`. 예: `https://<user>.github.io` |
+| `ALLOWED_ORIGINS` | 선택. 기본 `*`. 운영은 `https://jev-trading-arena.vercel.app`으로 제한 |
 
-배포 명령:
+처음 한 번 설정한 뒤에는 `main`에 병합하는 것으로 배포가 끝납니다. 새 환경에서 처음 설정할 때만 아래를 실행합니다.
 
 ```bash
 npx vercel login
-npx vercel link --yes --project jev-trading-arena
-npx vercel env add TURSO_DATABASE_URL production   # 나머지 변수도 같은 방식
-npx vercel deploy --prod
-gh variable set API_BASE_URL --body "https://<vercel-주소>"   # Pages 화면이 사용할 API
+npx vercel link --yes --project jev-trading-arena          # 저장소 연결과 자동 배포 설정 포함
+npx vercel integration add tursocloud/database             # Turso DB 생성, 환경 변수 자동 등록
+npx vercel env add CRON_SECRET production                  # 임의의 긴 문자열
+npx vercel deploy --prod                                   # 수동 배포가 필요할 때만
 ```
 
 ## 핵심 개념
