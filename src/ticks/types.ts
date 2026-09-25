@@ -27,6 +27,8 @@ export interface TickStore {
    */
   fillPrice(symbol: string, date: string, quantity: number, participation: number): Promise<number | null>;
   coverage(): Promise<TickCoverage[]>;
+  /** 기간 내 틱이 저장된 날짜 */
+  storedDays(symbol: string, from: string, to: string): Promise<Set<string>>;
   sizeBytes(): number;
   readonly maxBytes: number;
   close(): void;

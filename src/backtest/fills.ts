@@ -31,6 +31,12 @@ async function cryptoMinuteDay(symbol: string, date: string, deps: FillDeps): Pr
   return { interval: '1m', bars };
 }
 
+/** 경고를 오류 종류별로 한 번씩만 남기기 위한 키 (날짜·숫자는 지워서 같은 원인끼리 묶는다) */
+function errorKey(err: unknown): string {
+  const message = err instanceof Error ? `${err.name}:${err.message}` : String(err);
+  return message.replace(/\d+/g, '#').slice(0, 80);
+}
+
 const dailyAverage = (bar: Bar) => (bar.open + bar.high + bar.low + bar.close) / 4;
 
 /**
@@ -55,7 +61,7 @@ export function makeFillPrice(
       const day = params.market === 'CRYPTO' ? await cryptoMinuteDay(symbol, date, deps) : stockDays.get(symbol)?.get(date);
       return adjustedFill(bar.open, day?.bars ?? []);
     } catch (err) {
-      warnOnce(`minute:${symbol}`, `minute bars unavailable for ${symbol}; using daily average`, err);
+      warnOnce(`minute:${symbol}:${errorKey(err)}`, `minute bars unavailable for ${symbol}; using daily average`, err);
       return null;
     }
   };
@@ -66,7 +72,7 @@ export function makeFillPrice(
       await deps.ticks.loadDay(symbol, date);
       return await deps.ticks.fillPrice(symbol, date, quantity, deps.participation);
     } catch (err) {
-      warnOnce(`tick:${err instanceof Error ? err.name : 'x'}`, `tick data unavailable (${symbol} ${date}); falling back to minute VWAP`, err);
+      warnOnce(`tick:${symbol}:${errorKey(err)}`, `tick data unavailable (${symbol} ${date}); falling back to minute VWAP`, err);
       return null;
     }
   };

@@ -27,9 +27,34 @@ function parseArgs(argv: readonly string[]): { symbols: string[]; from: string; 
   return { symbols, from, to: to! };
 }
 
+/** 서버가 틱 파일을 열고 있으면(DuckDB는 한 프로세스만 쓸 수 있음) 서버 API로 하루씩 수집 */
+async function collectViaServer(symbols: readonly string[], from: string, to: string): Promise<void> {
+  const base = `http://127.0.0.1:${CONFIG.port}`;
+  const tickers = symbols.map((s) => s.replace(/USDT$/, ''));
+  for (let t = Date.parse(`${from}T00:00:00Z`); t <= Date.parse(`${to}T00:00:00Z`); t += 86_400_000) {
+    const date = new Date(t).toISOString().slice(0, 10);
+    const res = await fetch(`${base}/api/ticks/collect`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tickers, from: date, to: date }),
+    }).catch((err: unknown) => {
+      throw new Error(`틱 저장소는 다른 프로세스가 쓰는 중인데 ${base} 서버에 연결할 수 없습니다. 서버와 같은 PORT로 실행하세요`, { cause: err });
+    });
+    const body = await res.json() as { success: boolean; data: { symbol: string; trades?: number; cached?: boolean; error?: string }[]; error: string | null };
+    if (!body.success) throw new Error(body.error ?? `HTTP ${res.status}`);
+    for (const r of body.data) logger.info('ticks', `${r.symbol} ${date}: ${r.error ?? `${r.trades?.toLocaleString()} trades${r.cached ? ' (이미 있음)' : ''}`}`);
+  }
+}
+
 async function main(): Promise<void> {
   const { symbols, from, to } = parseArgs(process.argv.slice(2));
-  const store = await DuckDbTickStore.open(CONFIG.ticks.path, new BinanceTickDownloader(), { maxBytes: CONFIG.ticks.maxBytes });
+  let store: DuckDbTickStore;
+  try {
+    store = await DuckDbTickStore.open(CONFIG.ticks.path, new BinanceTickDownloader(), { maxBytes: CONFIG.ticks.maxBytes });
+  } catch (err) {
+    if (!/lock/i.test(String(err))) throw err;
+    logger.info('ticks', '서버가 틱 저장소를 사용 중이라 서버 API로 수집합니다');
+    await collectViaServer(symbols, from, to);
+    return;
+  }
   try {
     for (let t = Date.parse(`${from}T00:00:00Z`); t <= Date.parse(`${to}T00:00:00Z`); t += 86_400_000) {
       const date = new Date(t).toISOString().slice(0, 10);

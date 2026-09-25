@@ -106,3 +106,34 @@ test('틱 체결은 코인 전용, 지원 외 코인 거부', async () => {
   assert.equal((await run({ market: 'US', tickers: ['AAPL'], intervals: [5], execution: 'tick' })).status, 400);
   assert.equal((await run({ tickers: ['DOGE'] })).status, 400);
 });
+
+test('틱 체결 사전 점검: 필요한 틱 용량이 남은 용량을 넘으면 시작 전에 거부', async () => {
+  const small = await DuckDbTickStore.open(':memory:', downloader, { maxBytes: 300e6 });
+  const app2 = createApp({ db: await openLocalDatabase(':memory:'), fetcher, liveJev: null, ticks: small, cryptoMinutes, intradayFetcher: async () => [] });
+  const srv = createServer((req, res) => { void app2.handle(req, res); });
+  await new Promise<void>((r) => srv.listen(0, r));
+  try {
+    const url = `http://127.0.0.1:${(srv.address() as AddressInfo).port}/api/runs`;
+    const body = { nickname: 'b', market: 'CRYPTO', tickers: ['BTC'], startDate: '2025-01-01', endDate: '2025-06-30', initialCapital: 10000, engine: 'mock', strategies: ['noul'], efforts: ['low'], execution: 'tick' };
+    const tooBig = await fetch(url, { method: 'POST', body: JSON.stringify({ ...body, intervals: [1] }) });
+    const tooBigBody = await tooBig.json();
+    assert.equal(tooBig.status, 400, JSON.stringify(tooBigBody));
+    assert.match(tooBigBody.error, /남은 용량/);
+    const fits = await fetch(url, { method: 'POST', body: JSON.stringify({ ...body, endDate: '2025-02-05', intervals: [7] }) });
+    assert.equal(fits.status, 202, await fits.text());
+    await app2.queue.onIdle();
+  } finally {
+    srv.close();
+    small.close();
+  }
+});
+
+test('틱 저장소 없이 재개된 틱 실행은 분봉으로 바꾸지 않고 실패 처리', async () => {
+  const app3 = createApp({ db: await openLocalDatabase(':memory:'), fetcher, liveJev: null, ticks: null, cryptoMinutes, intradayFetcher: async () => [] });
+  const id = await app3.runs.create({ nickname: 'r', market: 'CRYPTO', tickers: ['BTC'], startDate: '2025-01-01', endDate: '2025-02-01', intervalDays: 7, effort: 'low', strategy: 'noul', initialCapital: 10000, engine: 'mock', execution: 'tick' }, 'g');
+  app3.queue.enqueue([id]);
+  await app3.queue.onIdle();
+  const run = (await app3.runs.get(id))!;
+  assert.equal(run.status, 'failed');
+  assert.match(String(run.error), /틱 저장소가 꺼져/);
+});

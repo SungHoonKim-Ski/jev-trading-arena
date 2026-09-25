@@ -117,7 +117,7 @@ test('simulate: fillPrice에 매매 방향과 시가 기준 예상 수량 전달
     ...base, symbols: ['A'], bars: { A: bars }, startDate: bars[0]!.date, endDate: bars[3]!.date, intervalDays: 1, decide,
     fillPrice: async (_s, _d, side, qty) => { calls.push([side, qty]); return side === 'buy' ? 25 : 18; },
   });
-  assert.deepEqual(calls, [['buy', 50], ['sell', 40]]);
+  assert.deepEqual(calls, [['buy', 50], ['buy', 40], ['sell', 40]]); // 수량이 20% 줄어 최종 수량으로 재호가
   assert.equal(r.trades[0]!.shares, 40); // 1000/25
   assert.equal(r.trades[1]!.price, 18);
 });

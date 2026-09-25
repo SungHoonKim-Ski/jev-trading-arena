@@ -122,6 +122,8 @@ export async function executeRun(runId: number, deps: RunnerDeps): Promise<void>
   if (!params) throw new Error(`run ${runId} not found`);
   // 다른 인스턴스가 이미 가져간 실행이면 건너뛴다
   if (!(await deps.runs.claim(runId))) return;
+  // 재시작 후 틱 저장소가 꺼진 상태라면 조용히 분봉으로 바꾸지 않고 실패로 기록
+  if (params.execution === 'tick' && !deps.ticks) throw new Error('원본 틱 저장소가 꺼져 있어 틱 체결 실행을 진행할 수 없습니다 (TICKS 설정 확인)');
   await deps.runs.setProgress(runId, 0.02);
 
   const symbols = await loadSymbols(params, deps.prices);

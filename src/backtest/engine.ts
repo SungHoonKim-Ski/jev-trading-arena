@@ -92,6 +92,9 @@ function currentWeights(input: SimulationInput, p: Portfolio, date: string): Rec
 interface Order { readonly symbol: string; readonly target: number }
 
 /** 시가에 목표 비중으로 리밸런싱. 매도 먼저, 이후 현금 한도 내 매수 */
+/** 체결가 반영 후 수량 변화가 이 비율을 넘으면 다시 호가를 받는다 */
+const REQUOTE_TOLERANCE = 0.05;
+
 /** 수량을 매매 단위로 내림. 부동소수 오차를 없애려고 단위 개수(정수)로 계산 */
 function roundLots(quantity: number, lot: number): number {
   const lots = Math.floor(quantity / lot + 1e-9);
@@ -106,9 +109,18 @@ async function execute(input: SimulationInput, p: Portfolio, orders: readonly Or
     const held = p.shares[o.symbol] ?? 0;
     // 시가로 예상 수량을 잡고 체결가를 구한 뒤, 그 가격으로 최종 수량을 다시 계산
     const estimate = roundLots((slot * o.target) / open, lot) - held;
-    const custom = estimate === 0 ? null : await input.fillPrice?.(o.symbol, date, estimate > 0 ? 'buy' : 'sell', Math.abs(estimate));
-    const price = custom ?? open;
-    return { ...o, price, held, delta: roundLots((slot * o.target) / price, lot) - held };
+    if (estimate === 0 || !input.fillPrice) return { ...o, price: open, held, delta: estimate };
+    const side = estimate > 0 ? 'buy' : 'sell';
+    let price = (await input.fillPrice(o.symbol, date, side, Math.abs(estimate))) ?? open;
+    let delta = roundLots((slot * o.target) / price, lot) - held;
+    // 체결가 반영 후 수량이 크게 바뀌면 최종 수량으로 한 번만 다시 호가를 받는다
+    if (Math.sign(delta) === Math.sign(estimate) && Math.abs(delta - estimate) > Math.abs(estimate) * REQUOTE_TOLERANCE) {
+      price = (await input.fillPrice(o.symbol, date, side, Math.abs(delta))) ?? price;
+      delta = roundLots((slot * o.target) / price, lot) - held;
+    }
+    // 체결가 때문에 매매 방향이 뒤집히면(매수 호가로 매도 등) 거래하지 않는다
+    if (Math.sign(delta) !== Math.sign(estimate)) delta = 0;
+    return { ...o, price, held, delta };
   }));
   const trades: Trade[] = [];
   let cash = p.cash;

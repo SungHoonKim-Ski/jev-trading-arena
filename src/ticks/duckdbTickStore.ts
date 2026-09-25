@@ -46,14 +46,18 @@ const sqlString = (s: string) => `'${s.replace(/'/g, "''")}'`;
  */
 export class DuckDbTickStore implements TickStore {
   readonly maxBytes: number;
+  /** 읽기 전용 연결 (체결가·커버리지 조회) */
   readonly #conn: DuckDBConnection;
+  /** 쓰기 전용 연결 (적재 트랜잭션). 읽기와 분리해 트랜잭션 실패가 조회에 번지지 않게 한다 */
+  readonly #writer: DuckDBConnection;
   readonly #file: string;
   readonly #downloader: TickDownloader;
   readonly #close: () => void;
   #writeChain: Promise<unknown> = Promise.resolve();
 
-  private constructor(conn: DuckDBConnection, file: string, downloader: TickDownloader, maxBytes: number, close: () => void) {
+  private constructor(conn: DuckDBConnection, writer: DuckDBConnection, file: string, downloader: TickDownloader, maxBytes: number, close: () => void) {
     this.#conn = conn;
+    this.#writer = writer;
     this.#file = file;
     this.#downloader = downloader;
     this.maxBytes = maxBytes;
@@ -64,13 +68,23 @@ export class DuckDbTickStore implements TickStore {
     if (file !== ':memory:') mkdirSync(path.dirname(file), { recursive: true });
     const instance = await DuckDBInstance.create(file);
     const conn = await instance.connect();
-    await conn.run(SCHEMA);
-    return new DuckDbTickStore(conn, file, downloader, opts.maxBytes, () => { conn.closeSync(); instance.closeSync(); });
+    const writer = await instance.connect();
+    await writer.run(SCHEMA);
+    return new DuckDbTickStore(conn, writer, file, downloader, opts.maxBytes, () => { conn.closeSync(); writer.closeSync(); instance.closeSync(); });
   }
 
-  async hasDay(symbol: string, date: string): Promise<boolean> {
-    const r = await this.#conn.runAndReadAll('SELECT 1 FROM tick_days WHERE symbol = $1 AND date = $2', [symbol, date]);
+  hasDay(symbol: string, date: string): Promise<boolean> {
+    return this.#hasDayOn(this.#conn, symbol, date);
+  }
+
+  async #hasDayOn(conn: DuckDBConnection, symbol: string, date: string): Promise<boolean> {
+    const r = await conn.runAndReadAll('SELECT 1 FROM tick_days WHERE symbol = $1 AND date = $2', [symbol, date]);
     return r.getRows().length > 0;
+  }
+
+  async storedDays(symbol: string, from: string, to: string): Promise<Set<string>> {
+    const r = await this.#conn.runAndReadAll('SELECT date FROM tick_days WHERE symbol = $1 AND date BETWEEN $2 AND $3', [symbol, from, to]);
+    return new Set(r.getRowObjects().map((o) => String(o.date)));
   }
 
   loadDay(symbol: string, date: string): Promise<{ trades: number; cached: boolean }> {
@@ -80,8 +94,8 @@ export class DuckDbTickStore implements TickStore {
   }
 
   async #loadDayNow(symbol: string, date: string): Promise<{ trades: number; cached: boolean }> {
-    if (await this.hasDay(symbol, date)) {
-      const r = await this.#conn.runAndReadAll('SELECT CAST(trades AS DOUBLE) AS n FROM tick_days WHERE symbol = $1 AND date = $2', [symbol, date]);
+    if (await this.#hasDayOn(this.#writer, symbol, date)) {
+      const r = await this.#writer.runAndReadAll('SELECT CAST(trades AS DOUBLE) AS n FROM tick_days WHERE symbol = $1 AND date = $2', [symbol, date]);
       return { trades: Number(r.getRowObjects()[0]!.n), cached: true };
     }
     const size = this.sizeBytes();
@@ -98,30 +112,30 @@ export class DuckDbTickStore implements TickStore {
 
   async #insertCsv(symbol: string, date: string, file: string, sha256: string): Promise<number> {
     const [from, to] = dayRangeUs(date);
-    await this.#conn.run('BEGIN TRANSACTION');
+    await this.#writer.run('BEGIN TRANSACTION');
     try {
-      await this.#conn.run('DELETE FROM trades WHERE symbol = $1 AND ts >= $2 AND ts < $3', [symbol, from, to]);
+      await this.#writer.run('DELETE FROM trades WHERE symbol = $1 AND ts >= $2 AND ts < $3', [symbol, from, to]);
       // 일부 파일은 헤더가 있으므로 숫자로 변환되지 않는 행은 버린다
-      await this.#conn.run(`INSERT INTO trades
+      await this.#writer.run(`INSERT INTO trades
         SELECT $1, TRY_CAST(c0 AS BIGINT), TRY_CAST(c1 AS DOUBLE), TRY_CAST(c2 AS DOUBLE),
           CASE WHEN TRY_CAST(c4 AS BIGINT) < ${MICROS_THRESHOLD} THEN TRY_CAST(c4 AS BIGINT) * 1000 ELSE TRY_CAST(c4 AS BIGINT) END,
           lower(c5) = 'true'
         FROM read_csv(${sqlString(file)}, header = false, all_varchar = true,
           columns = {'c0': 'VARCHAR', 'c1': 'VARCHAR', 'c2': 'VARCHAR', 'c3': 'VARCHAR', 'c4': 'VARCHAR', 'c5': 'VARCHAR', 'c6': 'VARCHAR'})
         WHERE TRY_CAST(c0 AS BIGINT) IS NOT NULL`, [symbol]);
-      const r = await this.#conn.runAndReadAll('SELECT CAST(COUNT(*) AS DOUBLE) AS n FROM trades WHERE symbol = $1 AND ts >= $2 AND ts < $3', [symbol, from, to]);
+      const r = await this.#writer.runAndReadAll('SELECT CAST(COUNT(*) AS DOUBLE) AS n FROM trades WHERE symbol = $1 AND ts >= $2 AND ts < $3', [symbol, from, to]);
       const trades = Number(r.getRowObjects()[0]!.n);
-      await this.#conn.run('INSERT OR REPLACE INTO tick_days VALUES ($1, $2, $3, $4, $5)', [symbol, date, trades, sha256, new Date().toISOString()]);
-      await this.#conn.run('COMMIT');
+      await this.#writer.run('INSERT OR REPLACE INTO tick_days VALUES ($1, $2, $3, $4, $5)', [symbol, date, trades, sha256, new Date().toISOString()]);
+      await this.#writer.run('COMMIT');
       return trades;
     } catch (err) {
-      await this.#conn.run('ROLLBACK');
+      await this.#writer.run('ROLLBACK');
       throw err;
     }
   }
 
   async fillPrice(symbol: string, date: string, quantity: number, participation: number): Promise<number | null> {
-    if (quantity <= 0 || participation <= 0) return null;
+    if (!(quantity > 0) || !(participation > 0 && participation <= 1)) return null;
     const [from, to] = dayRangeUs(date);
     const need = quantity / participation; // 따라가야 할 시장 체결량
     const r = await this.#conn.runAndReadAll(`

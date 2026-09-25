@@ -51,6 +51,8 @@ TYPESAFE_API_KEY=... npm start             # 실제 Jev 사용
 | `DB_PATH` | `data/trading.db` | |
 | `INTRADAY_COLLECT` | 켜짐 | `off`면 분봉 주기 수집 중지 |
 | `INTRADAY_COLLECT_EVERY_MS` | 6시간 | 분봉 수집 주기 |
+| `HOST` | `127.0.0.1` | 로컬 서버 수신 주소. 다른 기기에서 접속하려면 `0.0.0.0` (틱 수집 API가 열리므로 주의) |
+| `TRUST_PROXY` | 꺼짐 | 프록시 뒤에서만 `1`. 켜야 `X-Forwarded-For`로 요청 제한을 셉니다 (Vercel은 자동) |
 
 ## 배포
 
@@ -129,12 +131,14 @@ gh variable set API_BASE_URL --body "https://<vercel-주소>"   # Pages 화면�
 - **일봉**: Yahoo Finance 수정주가. 요청 구간이 DB에 있으면 재사용합니다.
 - **분봉**: 무료 소스는 과거 틱 데이터를 제공하지 않습니다. Yahoo 분봉도 1분봉 30일, 5분봉 60일, 60분봉 730일까지만 줍니다. 그래서 서버가 주기적으로 받아 DB에 계속 누적합니다. 서비스를 오래 켜 둘수록 1분봉 기간이 길어집니다.
 - **코인 시세**: 일봉과 1분봉은 바이낸스 API에서 받습니다. 1분봉은 상장 이후 전체 이력이 있어서, 체결일마다 그날 치만 받아 DB에 저장합니다.
-- **코인 원본 틱**: 바이낸스 공개 데이터(data.binance.vision)의 일별 체결 파일을 SHA-256 체크섬으로 검증한 뒤 로컬 DuckDB(`data/ticks.duckdb`)에 저장합니다. 하루 비트코인 약 330만 건(약 37MB), 5종 합계 약 120MB입니다. 서버가 매일 전날 치를 자동 수집하고, 틱 체결 백테스트는 필요한 날을 자동으로 받습니다. `TICK_STORE_MAX_GB`(기본 10GB)를 넘으면 수집을 멈추고 1분봉 체결로 대체합니다.
+- **코인 원본 틱**: 바이낸스 공개 데이터(data.binance.vision)의 일별 체결 파일을 SHA-256 체크섬으로 검증한 뒤 로컬 DuckDB(`data/ticks.duckdb`)에 저장합니다. 하루 비트코인 약 330만 건(약 37MB), 5종 합계 약 120MB입니다. 서버가 매일 전날 치를 자동 수집하고, 틱 체결 백테스트는 필요한 날을 자동으로 받습니다. `TICK_STORE_MAX_GB`(기본 10GB)를 넘으면 수집을 멈추고 1분봉 체결로 대체합니다. 용량은 다운로드 전에 확인하므로 최대 하루치만큼 넘을 수 있습니다. 틱 체결 백테스트는 시작 전에 새로 받을 틱 용량을 추정해, 남은 용량을 넘으면 실행하지 않고 안내합니다.
 
 ```bash
 npm run ticks -- ALL 2026-09-01 2026-09-23   # 5종 전체
 npm run ticks -- BTC,ETH 2026-09-20          # 하루치
 ```
+
+DuckDB 파일은 한 프로세스만 열 수 있습니다. 서버가 켜져 있으면 CLI는 자동으로 서버 API를 통해 하루씩 수집합니다.
 
 | 틱 관련 환경 변수 | 기본값 | 설명 |
 |---|---|---|
@@ -187,7 +191,7 @@ e2e/          Playwright E2E (가짜 시세 서버 사용)
 ## 테스트
 
 ```bash
-npm test          # 단위 + 통합 (85개)
+npm test          # 단위 + 통합 (94개)
 npm run coverage  # 라인 커버리지 약 98%
 npm run e2e       # Playwright (최초 1회 npx playwright install chromium)
 npm run typecheck

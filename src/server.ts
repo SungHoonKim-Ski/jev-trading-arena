@@ -42,9 +42,9 @@ if (ticks && CONFIG.ticks.dailyCollect) {
 }
 
 const server = createServer((req, res) => { void app.handle(req, res); });
-server.listen(CONFIG.port, () => {
+server.listen(CONFIG.port, CONFIG.host, () => {
   const engine = CONFIG.jev.apiKey ? `live (${CONFIG.jev.model})` : 'mock only (TYPESAFE_API_KEY 미설정)';
-  logger.info('server', `http://localhost:${CONFIG.port}  |  Jev engine: ${engine}  |  DB: ${CONFIG.tursoUrl ? 'Turso' : CONFIG.dbPath}  |  ticks: ${ticks ? CONFIG.ticks.path : 'off'}`);
+  logger.info('server', `http://${CONFIG.host}:${CONFIG.port}  |  Jev engine: ${engine}  |  DB: ${CONFIG.tursoUrl ? 'Turso' : CONFIG.dbPath}  |  ticks: ${ticks ? CONFIG.ticks.path : 'off'}`);
 });
 
 const shutdown = () => {

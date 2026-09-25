@@ -89,3 +89,27 @@ test('BinanceTickDownloader: 아직 공개되지 않은 날(404)은 명확한 �
   const f = (async () => new Response('', { status: 404 })) as unknown as typeof fetch;
   await assert.rejects(new BinanceTickDownloader(f).download('BTCUSDT', DAY), /공개되지 않았/);
 });
+
+test('동시성: 다른 날 적재가 실패해도 진행 중인 체결가 조회는 영향 없음 (읽기·쓰기 연결 분리)', async () => {
+  let fail = false;
+  const dl = { download: async (_s: string, date: string) => {
+    if (fail) { await new Promise((r) => setTimeout(r, 5)); throw new Error(`boom ${date}`); }
+    return { csv: csv(ROWS), sha256: 'x' };
+  } };
+  const store = await DuckDbTickStore.open(':memory:', dl, { maxBytes: 1e12 });
+  await store.loadDay('BTCUSDT', DAY);
+  fail = true;
+  const failing = store.loadDay('BTCUSDT', '2025-01-05').catch(() => 'failed');
+  const reads = await Promise.all(Array.from({ length: 100 }, () => store.fillPrice('BTCUSDT', DAY, 0.3, 0.1)));
+  assert.equal(await failing, 'failed');
+  assert.ok(reads.every((p) => p === 110), JSON.stringify(reads.slice(0, 5)));
+  store.close();
+});
+
+test('storedDays: 기간 내 저장된 날짜 집합', async () => {
+  const store = await DuckDbTickStore.open(':memory:', fakeDownloader(csv(ROWS)), { maxBytes: 1e12 });
+  await store.loadDay('BTCUSDT', DAY);
+  assert.deepEqual([...await store.storedDays('BTCUSDT', '2025-01-01', '2025-01-31')], [DAY]);
+  assert.equal((await store.storedDays('ETHUSDT', '2025-01-01', '2025-01-31')).size, 0);
+  store.close();
+});

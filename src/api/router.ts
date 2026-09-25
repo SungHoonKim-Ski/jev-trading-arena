@@ -4,13 +4,14 @@ import { ALL_INTERVALS, CONFIG, EFFORT_INFO, MARKETS, STRATEGY_INFO } from '../c
 import type { RunRepository } from '../db/runRepository.ts';
 import type { RunQueue } from '../backtest/queue.ts';
 import type { Effort, RunParams, Strategy } from '../types.ts';
-import { fail, HttpError, ok, RateLimiter, readJson } from './http.ts';
+import { clientIp, fail, HttpError, ok, RateLimiter, readJson } from './http.ts';
 import { TICKER_PRESETS } from './presets.ts';
 import { logger } from '../logger.ts';
 import { serveStatic } from './staticFiles.ts';
 import { collectSchema, createRunSchema, formatZodError, rankQuerySchema, tickCollectSchema, type CreateRunInput } from './validation.ts';
 import type { TickStore } from '../ticks/types.ts';
 import { CRYPTO_ASSETS, resolveCryptoSymbol } from '../market/binance.ts';
+import { estimateTickBytes } from '../ticks/estimate.ts';
 import type { IntradayRepository } from '../db/intradayRepository.ts';
 import type { IntradayCollector } from '../market/intradayCollector.ts';
 import type { PriceService } from '../market/priceService.ts';
@@ -66,23 +67,16 @@ function applyCors(req: IncomingMessage, res: ServerResponse): void {
   res.setHeader('Access-Control-Max-Age', '86400');
 }
 
-/** 프록시(Vercel) 뒤에서는 x-forwarded-for의 첫 주소가 실제 클라이언트 */
-function clientIp(req: IncomingMessage): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  const first = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',')[0]?.trim();
-  return first || req.socket.remoteAddress || 'unknown';
-}
-
 export type RequestHandler = (req: IncomingMessage, res: ServerResponse) => Promise<void>;
 
 export function createRouter(deps: RouterDeps): RequestHandler {
   const limiter = new RateLimiter(CONFIG.rateLimit.maxCreates, CONFIG.rateLimit.windowMs);
 
   async function createRuns(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    if (!limiter.allow(clientIp(req))) throw new HttpError(429, '요청이 너무 많습니다. 잠시 후 다시 시도하세요');
+    if (!limiter.allow(clientIp(req, CONFIG.trustProxy))) throw new HttpError(429, '요청이 너무 많습니다. 잠시 후 다시 시도하세요');
     const parsed = createRunSchema.safeParse(await readJson(req));
     if (!parsed.success) throw new HttpError(400, formatZodError(parsed.error));
-    if (parsed.data.execution === 'tick' && !deps.ticks) throw new HttpError(400, '이 서버에서는 틱 체결을 사용할 수 없습니다 (원본 틱 저장소는 로컬 전용)');
+    if (parsed.data.execution === 'tick') await assertTickBudget(parsed.data);
     if (parsed.data.engine === 'live' && !deps.jevLive) throw new HttpError(400, 'TYPESAFE_API_KEY가 설정되지 않아 실제 Jev 엔진을 사용할 수 없습니다');
     const combos = expandCombos(parsed.data);
     if (combos.length > CONFIG.maxRunsPerRequest) throw new HttpError(400, `조합이 ${combos.length}개입니다. 한 번에 최대 ${CONFIG.maxRunsPerRequest}개까지 실행할 수 있습니다`);
@@ -95,7 +89,7 @@ export function createRouter(deps: RouterDeps): RequestHandler {
 
   /** 종목을 일봉으로 먼저 확인(심볼 확정)한 뒤 분봉 수집 */
   async function collectIntraday(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    if (!limiter.allow(clientIp(req))) throw new HttpError(429, '요청이 너무 많습니다. 잠시 후 다시 시도하세요');
+    if (!limiter.allow(clientIp(req, CONFIG.trustProxy))) throw new HttpError(429, '요청이 너무 많습니다. 잠시 후 다시 시도하세요');
     const parsed = collectSchema.safeParse(await readJson(req));
     if (!parsed.success) throw new HttpError(400, formatZodError(parsed.error));
     const today = new Date().toISOString().slice(0, 10);
@@ -117,6 +111,19 @@ export function createRouter(deps: RouterDeps): RequestHandler {
     ok(res, await deps.onCron());
   }
 
+  /** 틱 체결은 체결일마다 하루치 틱이 필요하므로, 용량 상한을 넘을 요청은 시작 전에 거부 */
+  async function assertTickBudget(input: CreateRunInput): Promise<void> {
+    if (!deps.ticks) throw new HttpError(400, '이 서버에서는 틱 체결을 사용할 수 없습니다 (원본 틱 저장소는 로컬 전용)');
+    const symbols = [...new Set(input.tickers.map((t) => resolveCryptoSymbol(t)!))];
+    const stored = new Map(await Promise.all(symbols.map(async (s) => [s, await deps.ticks!.storedDays(s, input.startDate, input.endDate)] as const)));
+    const need = estimateTickBytes({ symbols, startDate: input.startDate, endDate: input.endDate, intervals: input.intervals }, stored);
+    const remaining = deps.ticks.maxBytes - deps.ticks.sizeBytes();
+    if (need.bytes > remaining) {
+      const gbText = (b: number) => `${(b / 1e9).toFixed(1)}GB`;
+      throw new HttpError(400, `틱 체결에 새로 받아야 할 틱이 약 ${gbText(need.bytes)}(${need.days}개 코인·일)로 남은 용량 ${gbText(Math.max(0, remaining))}을 넘습니다. 기간을 줄이거나 매매 주기를 늘리거나 TICK_STORE_MAX_GB를 늘리세요`);
+    }
+  }
+
   async function tickCoverage(res: ServerResponse): Promise<void> {
     if (!deps.ticks) return ok(res, { enabled: false, sizeBytes: 0, maxBytes: 0, coverage: [] });
     ok(res, { enabled: true, sizeBytes: deps.ticks.sizeBytes(), maxBytes: deps.ticks.maxBytes, coverage: await deps.ticks.coverage() });
@@ -125,7 +132,7 @@ export function createRouter(deps: RouterDeps): RequestHandler {
   /** 지정 기간의 코인 원본 틱을 받아 저장 (요청당 코인×일수 10개 이하) */
   async function collectTicks(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (!deps.ticks) throw new HttpError(400, '이 서버에서는 원본 틱 저장소를 사용할 수 없습니다');
-    if (!limiter.allow(clientIp(req))) throw new HttpError(429, '요청이 너무 많습니다. 잠시 후 다시 시도하세요');
+    if (!limiter.allow(clientIp(req, CONFIG.trustProxy))) throw new HttpError(429, '요청이 너무 많습니다. 잠시 후 다시 시도하세요');
     const parsed = tickCollectSchema.safeParse(await readJson(req));
     if (!parsed.success) throw new HttpError(400, formatZodError(parsed.error));
     const results: { symbol: string; date: string; trades?: number; cached?: boolean; error?: string }[] = [];

@@ -1,6 +1,31 @@
 import path from 'node:path';
 import type { Effort, Market, Strategy } from './types.ts';
 
+export interface TickConfig {
+  readonly enabled: boolean;
+  readonly path: string;
+  readonly maxBytes: number;
+  readonly participation: number;
+  readonly dailyCollect: boolean;
+}
+
+/** 원본 틱 설정. 잘못된 값은 조용히 넘기지 않고 시작 시 실패시킨다 */
+export function readTickConfig(env: Readonly<Record<string, string | undefined>>, rootDir: string): TickConfig {
+  const maxGb = Number(env.TICK_STORE_MAX_GB ?? 10);
+  if (!Number.isFinite(maxGb) || maxGb <= 0) throw new Error(`TICK_STORE_MAX_GB는 0보다 큰 숫자여야 합니다 (현재: ${env.TICK_STORE_MAX_GB})`);
+  const participation = Number(env.TICK_PARTICIPATION ?? 0.1);
+  if (!Number.isFinite(participation) || participation <= 0 || participation > 1) {
+    throw new Error(`TICK_PARTICIPATION은 0보다 크고 1 이하인 숫자여야 합니다 (현재: ${env.TICK_PARTICIPATION})`);
+  }
+  return {
+    enabled: env.TICKS !== 'off',
+    path: env.TICK_STORE_PATH ?? path.join(rootDir, 'data', 'ticks.duckdb'),
+    maxBytes: maxGb * 1e9,
+    participation,
+    dailyCollect: env.TICK_DAILY_COLLECT !== 'off',
+  };
+}
+
 // 번들(Vercel) 환경에서는 import.meta.dirname이 없을 수 있다
 const root = import.meta.dirname ? path.resolve(import.meta.dirname, '..') : process.cwd();
 
@@ -26,16 +51,12 @@ export const CONFIG = {
   /** 분봉 주기 수집 간격 (Yahoo 1분봉은 30일만 보관되므로 최소 하루 1회 이상) */
   intradayCollectEveryMs: Number(process.env.INTRADAY_COLLECT_EVERY_MS ?? 6 * 3600_000),
   intradayCollectEnabled: process.env.INTRADAY_COLLECT !== 'off',
-  ticks: {
-    /** 원본 틱 저장소 (로컬 전용). 'off'면 틱 체결 비활성 */
-    enabled: process.env.TICKS !== 'off',
-    path: process.env.TICK_STORE_PATH ?? path.join(root, 'data', 'ticks.duckdb'),
-    maxBytes: Number(process.env.TICK_STORE_MAX_GB ?? 10) * 1e9,
-    /** 내 주문이 시장 체결량에서 차지하는 비율 (틱 체결 시뮬레이션) */
-    participation: Number(process.env.TICK_PARTICIPATION ?? 0.1),
-    /** 매일 전날 5개 코인의 원본 틱을 자동 수집 */
-    dailyCollect: process.env.TICK_DAILY_COLLECT !== 'off',
-  },
+  ticks: readTickConfig(process.env, root),
+  /** 로컬 서버 수신 주소. 기본은 이 컴퓨터에서만 접속 가능 (외부 공개 시 HOST=0.0.0.0) */
+  host: process.env.HOST ?? '127.0.0.1',
+  /** 프록시(Vercel 등) 뒤에서만 X-Forwarded-For를 믿는다 */
+  trustProxy: process.env.TRUST_PROXY === '1' || Boolean(process.env.VERCEL),
+
   maxRunsPerRequest: 24,
   rateLimit: { windowMs: 60_000, maxCreates: 20 },
 } as const;
