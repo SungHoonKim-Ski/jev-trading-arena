@@ -75,8 +75,7 @@ export function render(root) {
       <div class="chips">${specs.map((s) => `<span class="chip">${esc(INTERVAL_LABEL[s.interval])}: 최근 ${s.maxDays + 1}일</span>`).join('')}</div></div>
     <div class="card"><h3 style="margin-top:0">지금 수집</h3>
       <form id="collect-form" class="filters">
-        <label>시장 <select name="market"><option value="KR">한국</option><option value="US">미국</option></select></label>
-        <label>종목 <input type="text" name="tickers" placeholder="005930, 000660 또는 AAPL, NVDA" size="32" /></label>
+        <label>종목 <select name="ticker">${['KR', 'US'].map((mk) => `<optgroup label="${esc(meta().markets[mk].label)}">${meta().presets[mk].map((p) => `<option value="${mk}:${esc(p.ticker)}">${esc(p.name)}</option>`).join('')}</optgroup>`).join('')}</select></label>
         <button class="primary" type="submit">수집</button>
         <span id="collect-msg" class="hint" role="status"></span>
       </form></div>
@@ -95,12 +94,11 @@ export function render(root) {
     e.preventDefault();
     const msg = root.querySelector('#collect-msg');
     const button = form.querySelector('button');
-    const tickers = String(form.tickers.value).split(/[\s,]+/).filter(Boolean);
-    if (tickers.length === 0) { msg.textContent = '종목을 입력하세요'; return; }
+    const [market, ticker] = String(form.ticker.value).split(':');
     button.disabled = true;
     msg.textContent = '수집 중… (1분봉은 7일 단위로 나눠 받아 수십 초 걸릴 수 있습니다)';
     try {
-      const results = await api('/api/data/collect', { method: 'POST', body: JSON.stringify({ market: form.market.value, tickers }) });
+      const results = await api('/api/data/collect', { method: 'POST', body: JSON.stringify({ market, tickers: [ticker] }) });
       msg.textContent = results.map((r) => `${r.symbol}: ${Object.entries(r.saved).map(([k, v]) => `${INTERVAL_LABEL[k]} +${v}`).join(', ')}${r.errors.length ? ' (일부 실패)' : ''}`).join(' · ');
       loadCoverage(root);
     } catch (ex) {

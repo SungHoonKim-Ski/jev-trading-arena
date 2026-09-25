@@ -287,3 +287,6 @@ label.chip.choice:has(input:checked) .dot { border-color: var(--accent-ink); bac
 .strategy-card.choice { display: block; padding-left: 40px; }
 .strategy-card.choice .dot { position: absolute; left: 14px; top: 17px; margin: 0; }
 .strategy-card .desc { color: var(--muted); font-size: 12px; }
+
+.asset-group + .asset-group { margin-top: 10px; }
+.group-label { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
