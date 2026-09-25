@@ -1,0 +1,8 @@
+# 로컬 데이터·비밀값·산출물은 업로드하지 않는다
+data/
+.env*
+node_modules/
+test-results/
+playwright-report/
+coverage/
+.vercel/output/

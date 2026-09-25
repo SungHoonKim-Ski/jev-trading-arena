@@ -4,6 +4,8 @@ TypeSafe의 판단 전용 모델 **Jev**에게 매매 판단을 맡겨 한국·�
 기간, 종목, Jev에게 묻는 방식(전략), effort, 매매 주기를 정하면 과거 시세로 백테스트를 돌립니다.
 결과는 DB에 쌓이고 **랭킹**과 **전략 분석**으로 누가 어떤 조합으로 가장 많이 벌었는지 보여 줍니다.
 
+**바로 써 보기**: https://sunghoonkim-ski.github.io/jev-trading-arena/ (화면, GitHub Pages) · API https://jev-trading-arena.vercel.app (Vercel)
+
 ## 문제 이해: 누구의 어떤 불편을 해결하나
 
 - **대상**: LLM이나 판단 모델로 투자 전략을 실험해 보고 싶은 개인 투자자와 개발자.
