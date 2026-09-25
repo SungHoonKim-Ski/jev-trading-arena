@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { esc, meta, pct, signed, num, money, usd, effortLabel, intervalLabel, marketLabel, engineBadge, tickersText, STATUS_LABEL, ACTION_LABEL, thresholdLabel, exitRuleLabel, legacyTag } from '../format.js';
+import { esc, meta, pct, signed, num, money, usd, effortLabel, intervalLabel, marketLabel, engineBadge, tickersText, STATUS_LABEL, ACTION_LABEL, thresholdLabel, exitRuleLabel, legacyTag, runNames } from '../format.js';
 import { lineChart } from '../charts.js';
 
 const DECISION_ROWS = 200;
@@ -9,7 +9,7 @@ function tiles(run, currency) {
   const t = (k, v, s = '') => `<div class="tile"><div class="k">${esc(k)}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
   return `<div class="tiles">
     ${t('총 수익률', signed(run.total_return), `최종 ${esc(money(run.final_equity, currency))}`)}
-    ${t('매수 후 보유 대비', signed(run.excess_return), `보유 전략 ${esc(pct(run.benchmark_return))}`)}
+    ${t('그냥 보유보다', signed(run.excess_return), `그냥 보유했으면 ${esc(pct(run.benchmark_return))}`)}
     ${t('지수 수익률', signed(run.index_return), esc(meta().markets[run.market].indexName))}
     ${t('CAGR', signed(run.cagr), `변동성 ${esc(pct(run.volatility))}`)}
     ${t('최대 낙폭(MDD)', signed(run.mdd), `Sharpe ${esc(num(run.sharpe))}`)}
@@ -58,7 +58,7 @@ export async function render(root, runId, { onBack }) {
   }
   const { run, equity, trades, decisions } = detail;
   const currency = meta().markets[run.market].currency;
-  const names = run.symbol_names ?? {};
+  const names = runNames(run);
   const header = `<a href="#" class="back">← 돌아가기</a>
     <h2>${engineBadge(run.engine)} ${esc(run.nickname)}의 매매 기록</h2>
     <p class="lead">${esc(marketLabel(run.market))} · ${esc(tickersText(run))} · ${esc(run.start_date)} ~ ${esc(run.end_date)} ·

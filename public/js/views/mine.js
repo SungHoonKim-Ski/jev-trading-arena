@@ -9,7 +9,7 @@ async function load(root, nickname, onOpenRun) {
     const runs = await api(`/api/runs?${qs({ nickname, limit: 200 })}`);
     if (runs.length === 0) { out.innerHTML = '<div class="empty">실행 기록이 없습니다.</div>'; return; }
     out.innerHTML = `<div class="table-wrap"><table><thead><tr><th>#</th><th>실행 시각</th><th>확신 기준</th><th>effort</th><th>주기</th><th>시장</th><th>종목</th><th>기간</th><th>상태</th>
-      <th class="num">수익률</th><th class="num">보유 대비</th><th class="num">Sharpe</th></tr></thead><tbody>${runs.map((r) => `
+      <th class="num">수익률</th><th class="num">그냥 보유보다</th><th class="num">Sharpe</th></tr></thead><tbody>${runs.map((r) => `
       <tr class="clickable" data-run="${r.id}"><td>${r.id}</td><td>${esc(new Date(r.created_at).toLocaleString('ko-KR'))}</td>
         <td>${engineBadge(r.engine)} 기준 ${esc(thresholdLabel(r.threshold))}<span class="hint">${esc(legacyTag(r.strategy))}</span></td><td>${esc(effortLabel(r.effort))}</td><td>${esc(intervalLabel(r.interval_days))}</td>
         <td>${esc(marketLabel(r.market))}</td><td>${esc(tickersShort(r))}</td><td>${esc(r.start_date)} ~ ${esc(r.end_date)}</td>

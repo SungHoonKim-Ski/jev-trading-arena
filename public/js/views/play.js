@@ -1,5 +1,5 @@
 import { api, qs } from '../api.js';
-import { esc, meta, money, pct, marketLabel, intervalLabel, tickersText, thresholdLabel, exitRuleLabel, legacyTag } from '../format.js';
+import { esc, meta, money, pct, marketLabel, intervalLabel, tickersText, thresholdLabel, exitRuleLabel, legacyTag, runNames } from '../format.js';
 import { buildTimeline } from '../replay/timeline.js';
 import { createLiveChart } from '../replay/liveChart.js';
 
@@ -103,7 +103,7 @@ async function showResult(root, run, t) {
   out.innerHTML = `<div class="card result-card ${won ? 'won' : 'lost'}">
     <div class="result-title">${won ? '🏆 그냥 들고 있는 것보다 잘했어요' : '😵 그냥 들고 있는 게 나았어요'}</div>
     <div class="result-nums"><div><div class="k">최종 수익률</div><div class="v ${cls(last.pnlPct)}">${esc(pct(last.pnlPct))}</div></div>
-      <div><div class="k">보유 전략 대비</div><div class="v ${cls(last.vsBenchmark)}">${esc(pct(last.vsBenchmark))}p</div></div>
+      <div><div class="k">그냥 보유보다</div><div class="v ${cls(last.vsBenchmark)}">${esc(pct(last.vsBenchmark))}p</div></div>
       <div><div class="k">랭킹</div><div class="v" id="rank">…</div></div></div>
     <div class="row"><button type="button" class="ghost" data-act="restart">↺ 다시 보기</button><a class="primary-link" href="#run">▶ 새 매매</a><a href="#rank">랭킹 보기</a></div></div>`;
   out.querySelector('[data-act="restart"]').addEventListener('click', () => restart(root));
@@ -122,7 +122,7 @@ function renderFrame(root, s, frame) {
   root.querySelector('#pnl-pct').className = `s ${cls(f.pnlPct)}`;
   root.querySelector('#bench').textContent = pct(f.benchPct);
   const vs = root.querySelector('#vs');
-  vs.textContent = `${Math.abs(f.vsBenchmark * 100).toFixed(1)}%p ${f.vsBenchmark >= 0 ? '앞섬' : '뒤처짐'}`;
+  vs.textContent = `${s.engineName}가 ${Math.abs(f.vsBenchmark * 100).toFixed(1)}%p ${f.vsBenchmark >= 0 ? '더' : '덜'} 벌었어요`;
   vs.className = `s ${cls(f.vsBenchmark)}`;
   root.querySelector('#today').textContent = f.date;
   root.querySelector('#prog').style.width = `${((frame + 1) / t.frames.length) * 100}%`;
@@ -274,7 +274,7 @@ export async function render(root, runId) {
   root.innerHTML = shell(run);
   const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   session = {
-    t, run, currency: meta().markets[run.market].currency, names: run.symbol_names ?? {},
+    t, run, currency: meta().markets[run.market].currency, names: runNames(run),
     engineName: run.engine === 'live' ? 'Jev' : 'Mock Jev',
     frame: 0, lastFrame: -1, peak: 0, lastPnl: 0, lastPeakToast: -99, finished: false,
     playing: !reduceMotion, speed: 4, acc: 0, prev: performance.now(), raf: 0,

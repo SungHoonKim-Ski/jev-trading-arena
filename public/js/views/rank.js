@@ -5,7 +5,7 @@ import { currentNickname } from './run.js';
 
 const LIMIT = 200;
 const MARKET_TABS = [['', '전체'], ['KR', '🇰🇷 한국'], ['US', '🇺🇸 미국'], ['CRYPTO', '🪙 코인']];
-const SORTS = [['total_return', '수익률'], ['excess_return', '보유 대비']];
+const SORTS = [['total_return', '수익률 순'], ['excess_return', '보유보다 더 번 순']];
 const MEDALS = ['🥇', '🥈', '🥉'];
 
 let state = { market: '', sort: 'total_return', includeLegacy: false, more: { bestPerUser: 'true' } };
@@ -20,10 +20,11 @@ function monthsBetween(a, b) {
 /** 정렬 기준에 따라 큰 숫자·작은 숫자 결정 */
 function figures(r) {
   const vs = r.excess_return;
-  const vsText = `보유 대비 ${Math.abs(vs * 100).toFixed(1)}%p ${vs >= 0 ? '앞섬' : '뒤처짐'}`;
+  // 비교 대상(그냥 보유했을 때 수익률)을 그대로 보여 주고, 이겼으면 🏆
+  const hold = `그냥 보유했으면 ${pct(r.benchmark_return)}${vs >= 0 ? ' · 🏆 이김' : ''}`;
   return state.sort === 'excess_return'
-    ? { main: `${vs >= 0 ? '+' : ''}${(vs * 100).toFixed(1)}%p`, mainCls: cls(vs), sub: `수익률 ${pct(r.total_return)}`, subCls: cls(r.total_return) }
-    : { main: pct(r.total_return), mainCls: cls(r.total_return), sub: vsText, subCls: cls(vs) };
+    ? { main: `${vs >= 0 ? '+' : ''}${(vs * 100).toFixed(1)}%p`, mainCls: cls(vs), sub: `수익률 ${pct(r.total_return)} · ${hold}`, subCls: 'muted' }
+    : { main: pct(r.total_return), mainCls: cls(r.total_return), sub: hold, subCls: 'muted' };
 }
 
 function metaLine(r) {
@@ -80,7 +81,7 @@ function myCard(rows, mine) {
   const gap = ahead ? (state.sort === 'excess_return' ? ahead.excess_return - hit.excess_return : ahead.total_return - hit.total_return) : 0;
   return `<div class="my-rank">
     <div><div class="k">내 최고 기록</div><div class="v">${hit.rank}위 <span class="of">/ ${rows.length}</span></div></div>
-    <div><div class="k">${state.sort === 'excess_return' ? '보유 대비' : '수익률'}</div><div class="v ${f.mainCls}">${esc(f.main)}</div></div>
+    <div><div class="k">${state.sort === 'excess_return' ? '그냥 보유보다' : '수익률'}</div><div class="v ${f.mainCls}">${esc(f.main)}</div></div>
     <div class="chase">${ahead ? `바로 위 <b>${esc(ahead.nickname)}</b>까지 <b>${(gap * 100).toFixed(1)}%p</b>` : '🏆 지금 1위예요'}</div>
     <div class="row"><a href="#play/${hit.id}">내 매매 보기</a><a class="primary-link" href="#run">▶ 다시 도전</a></div>
   </div>`;
@@ -102,7 +103,7 @@ async function load(root) {
   const board = root.querySelector('#rank-board');
   board.innerHTML = '<div class="empty">불러오는 중…</div>';
   try {
-    const query = { ...state.more, market: state.market, sort: state.sort, limit: LIMIT, ...(state.includeLegacy ? {} : { strategy: 'noul' }) };
+    const query = { ...state.more, market: state.market, sort: state.sort, limit: LIMIT, ...(state.includeLegacy ? {} : { current: 'true' }) };
     const rows = await api(`/api/leaderboard?${qs(query)}`);
     const mine = currentNickname();
     root.querySelector('#my-rank').innerHTML = myCard(rows, mine);
@@ -127,13 +128,13 @@ function tabs(name, options, current) {
 export function render(root) {
   const m = meta();
   root.innerHTML = `<div class="rank-head"><h2>랭킹</h2>
-      <p class="lead">누가 Jev와 함께 가장 많이 벌었을까요? 기간마다 시장 상황이 달라서, 공정하게 겨루려면 <b>보유 대비</b>로 보세요.</p></div>
+      <p class="lead">누가 Jev와 함께 가장 많이 벌었을까요? 기간마다 시장 상황이 달라서, 공정하게 겨루려면 <b>보유보다 더 번 순</b>으로 보세요.</p></div>
     <div class="rank-controls">
       ${tabs('market', MARKET_TABS, state.market)}
       ${tabs('sort', SORTS, state.sort)}
       <details class="more-filters"><summary>필터 더보기</summary>
         ${filterBar(['engine', 'execution', 'threshold', 'effort', 'intervalDays', 'period', 'bestPerUser'], state.more)}
-        <label class="legacy-toggle"><input type="checkbox" id="include-legacy" ${state.includeLegacy ? 'checked' : ''} /> 이전 질문 방식(3지선다·5단계) 기록도 보기</label>
+        <label class="legacy-toggle"><input type="checkbox" id="include-legacy" ${state.includeLegacy ? 'checked' : ''} /> 이전 방식(3지선다·5단계)·이전 규칙(확신 기준 도입 전) 기록도 보기</label>
       </details>
     </div>
     <div id="my-rank"></div>

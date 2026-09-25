@@ -73,3 +73,13 @@ test('실행 검증: 전략을 생략하면 오를까?(noul)로, 다른 질문 �
   assert.deepEqual(ok.data!.strategies, ['noul']);
   assert.equal(createRunSchema.safeParse({ ...base, strategies: ['probability'] }).success, false);
 });
+
+test('koreanName: 프리셋 종목은 한국어 이름 (한국 .KS/.KQ, 미국, 코인), 그 외는 대체 이름', async () => {
+  const { koreanName } = await import('../src/market/presets.ts');
+  assert.equal(koreanName('005930.KS', 'Samsung Electronics Co., Ltd.'), '삼성전자');
+  assert.equal(koreanName('035720.KQ', 'Kakao'), '카카오');
+  assert.equal(koreanName('AAPL', 'Apple Inc.'), '애플');
+  assert.equal(koreanName('SPY', 'SPDR'), 'S&P 500 (SPY)');
+  assert.equal(koreanName('BTCUSDT', 'x'), '비트코인');
+  assert.equal(koreanName('ZZZ', 'Unknown Corp'), 'Unknown Corp');
+});

@@ -34,6 +34,8 @@ export interface RankFilters {
   readonly nickname?: string;
   readonly execution?: string;
   readonly threshold?: number;
+  /** true면 현재 규칙('오를까?' + 확신 기준) 기록만 */
+  readonly current?: boolean;
 }
 
 export const SORT_COLUMNS = ['total_return', 'excess_return', 'sharpe', 'cagr', 'mdd'] as const;
@@ -62,6 +64,7 @@ function whereClause(f: RankFilters): { sql: string; params: SqlArg[] } {
   };
   eq('market', f.market); eq('engine', f.engine); eq('effort', f.effort); eq('strategy', f.strategy);
   eq('interval_days', f.intervalDays); eq('start_date', f.startDate); eq('end_date', f.endDate); eq('nickname', f.nickname); eq('execution', f.execution); eq('threshold', f.threshold);
+  if (f.current) parts.push("strategy = 'noul' AND threshold IS NOT NULL");
   return { sql: parts.join(' AND '), params };
 }
 

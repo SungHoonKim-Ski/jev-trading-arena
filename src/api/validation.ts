@@ -76,6 +76,7 @@ export const rankQuerySchema = z.object({
   sort: z.enum(SORT_COLUMNS).default('total_return'),
   limit: z.preprocess((v) => (v == null || v === '' ? 50 : Number(v)), z.number().int().min(1).max(200)),
   bestPerUser: z.preprocess((v) => v === 'true' || v === '1', z.boolean()),
+  current: z.preprocess((v) => v === 'true' || v === '1', z.boolean()),
 });
 
 export function formatZodError(err: z.ZodError): string {

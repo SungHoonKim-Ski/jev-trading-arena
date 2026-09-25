@@ -37,12 +37,31 @@ export const intervalLabel = (d) => META?.intervals.find((i) => i.days === Numbe
 export const marketLabel = (m) => META?.markets[m]?.label ?? m;
 export const engineBadge = (e) => (e === 'live' ? '<span class="badge live">Jev</span>' : '<span class="badge">Mock</span>');
 
+let NAME_BY_SYMBOL = null;
+/** 저장된 심볼(005930.KS, AAPL, BTCUSDT)을 한국어 프리셋 이름으로. 예전 기록의 영어 이름도 여기서 바꿔 보여 준다 */
+export function assetName(symbol, fallback) {
+  if (!NAME_BY_SYMBOL && META) {
+    NAME_BY_SYMBOL = new Map([
+      ...META.presets.KR.flatMap((p) => [[`${p.ticker}.KS`, p.name], [`${p.ticker}.KQ`, p.name]]),
+      ...META.presets.US.map((p) => [p.ticker, p.name]),
+      ...(META.cryptoAssets ?? []).map((a) => [a.symbol, a.name]),
+    ]);
+  }
+  return NAME_BY_SYMBOL?.get(symbol) ?? fallback ?? symbol;
+}
+
+/** 실행의 종목 → 한국어 이름 맵 */
+export function runNames(run) {
+  const stored = run.symbol_names ?? {};
+  return Object.fromEntries(Object.keys(stored).map((s) => [s, assetName(s, stored[s])]));
+}
+
 export function tickersText(run) {
-  const names = run.symbol_names ?? {};
-  const list = Object.keys(names).length ? Object.entries(names).map(([s, n]) => `${n} (${s})`) : run.tickers;
+  const names = runNames(run);
+  const list = Object.keys(names).length ? Object.values(names) : run.tickers;
   return list.join(', ');
 }
 export function tickersShort(run) {
-  const names = run.symbol_names ? Object.values(run.symbol_names) : run.tickers;
+  const names = run.symbol_names ? Object.values(runNames(run)) : run.tickers;
   return names.length > 2 ? `${names.slice(0, 2).join(', ')} 외 ${names.length - 2}` : names.join(', ');
 }
