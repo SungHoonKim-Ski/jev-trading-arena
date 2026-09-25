@@ -24,6 +24,9 @@ let META = null;
 export const setMeta = (m) => { META = m; };
 export const meta = () => META;
 export const strategyLabel = (s) => META?.strategies[s]?.label ?? s;
+/** 사용자에게 보여 주는 쉬운 전략 이름 */
+export const STRATEGY_FRIENDLY = { choice: '단호하게', probability: '확률대로', noul: '오를까?', score: '등급으로' };
+export const strategyFriendly = (s) => STRATEGY_FRIENDLY[s] ?? s;
 export const effortLabel = (e) => META?.efforts[e]?.label ?? e;
 export const intervalLabel = (d) => META?.intervals.find((i) => i.days === Number(d))?.label ?? `${d}일`;
 export const marketLabel = (m) => META?.markets[m]?.label ?? m;

@@ -6,12 +6,13 @@ import * as statsView from './views/stats.js';
 import * as mineView from './views/mine.js';
 import * as detailView from './views/detail.js';
 import * as dataView from './views/data.js';
+import * as playView from './views/play.js';
 
 const VIEWS = { run: runView, rank: rankView, stats: statsView, mine: mineView, data: dataView };
 let lastTab = 'run';
 const rendered = new Set();
 
-const openRun = (id) => { location.hash = `#run/${id}`; };
+const openRun = (id) => { location.hash = `#play/${id}`; };
 
 function show(name) {
   document.querySelectorAll('section.view').forEach((s) => s.classList.toggle('active', s.id === `view-${name}`));
@@ -20,6 +21,13 @@ function show(name) {
 
 function route() {
   const hash = location.hash.replace(/^#/, '') || 'run';
+  playView.stop();
+  const play = /^play\/(\d+)$/.exec(hash);
+  if (play) {
+    show('play');
+    playView.render(document.getElementById('view-play'), Number(play[1]));
+    return;
+  }
   const detail = /^run\/(\d+)$/.exec(hash);
   if (detail) {
     show('detail');
