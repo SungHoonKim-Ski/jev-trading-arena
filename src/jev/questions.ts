@@ -28,13 +28,17 @@ export function parseQuestionId(id: string): { assetKey: string; perspective: nu
   return m ? { assetKey: m[1]!, perspective: Number(m[2]) } : null;
 }
 
-function horizonText(intervalDays: number): string {
-  return intervalDays <= 1 ? 'the next trading day' : `the next ${intervalDays} trading days`;
+type DayUnit = 'trading days' | 'days';
+type AssetNoun = 'stock' | 'cryptocurrency';
+
+function horizonText(intervalDays: number, unit: DayUnit): string {
+  const singular = unit === 'days' ? 'day' : 'trading day';
+  return intervalDays <= 1 ? `the next ${singular}` : `the next ${intervalDays} ${unit}`;
 }
 
 /** effort가 높을수록 더 많은 관점으로 같은 판단을 묻고 코드에서 앙상블한다 */
-function perspectives(intervalDays: number): readonly string[] {
-  const horizon = horizonText(intervalDays);
+function perspectives(intervalDays: number, unit: DayUnit): readonly string[] {
+  const horizon = horizonText(intervalDays, unit);
   return [
     `Looking only at the market data in \`{ref}\`, over ${horizon}`,
     `As a trend-following investor reading \`{ref}\`, over the next month`,
@@ -42,19 +46,19 @@ function perspectives(intervalDays: number): readonly string[] {
   ];
 }
 
-function questionFor(strategy: Strategy, lead: string): JevQuestion {
+function questionFor(strategy: Strategy, lead: string, noun: AssetNoun): JevQuestion {
   switch (strategy) {
     case 'choice':
     case 'probability':
-      return { type: 'choice', instructions: `${lead}, what should be done with a position in this stock?`, criteria: CHOICE_CRITERIA };
+      return { type: 'choice', instructions: `${lead}, what should be done with a position in this ${noun}?`, criteria: CHOICE_CRITERIA };
     case 'noul':
       return {
         type: 'noul',
-        instructions: `${lead}, will this stock's price be higher than it is today?`,
+        instructions: `${lead}, will this ${noun}'s price be higher than it is today?`,
         criteria: { true: 'The price will likely be higher.', false: 'The price will likely be lower or unchanged.' },
       };
     case 'score':
-      return { type: 'score', instructions: `${lead}, how would you rate the outlook for this stock?`, criteria: SCORE_LEVELS };
+      return { type: 'score', instructions: `${lead}, how would you rate the outlook for this ${noun}?`, criteria: SCORE_LEVELS };
   }
 }
 
@@ -64,6 +68,10 @@ export interface BuildRequestInput {
   readonly effort: Effort;
   readonly intervalDays: number;
   readonly model: string;
+  /** 기본 'stock'. 코인은 'cryptocurrency' */
+  readonly assetNoun?: AssetNoun;
+  /** 기본 'trading days'. 24시간 시장은 'days' */
+  readonly dayUnit?: DayUnit;
 }
 
 /**
@@ -73,11 +81,11 @@ export interface BuildRequestInput {
 export function buildJevRequest(input: BuildRequestInput): JevRequest {
   const assetKeys = Object.keys(input.assets);
   if (assetKeys.length === 0) throw new Error('at least one asset is required');
-  const leads = perspectives(input.intervalDays).slice(0, EFFORT_INFO[input.effort].perspectives);
+  const leads = perspectives(input.intervalDays, input.dayUnit ?? 'trading days').slice(0, EFFORT_INFO[input.effort].perspectives);
   const questions: Record<string, JevQuestion> = {};
   for (const key of assetKeys) {
     leads.forEach((lead, k) => {
-      questions[questionId(key, k)] = questionFor(input.strategy, lead.replace('{ref}', `assets.${key}`));
+      questions[questionId(key, k)] = questionFor(input.strategy, lead.replace('{ref}', `assets.${key}`), input.assetNoun ?? 'stock');
     });
   }
   return { model: input.model, state: { assets: input.assets }, questions };

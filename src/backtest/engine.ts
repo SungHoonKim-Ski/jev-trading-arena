@@ -25,6 +25,8 @@ export interface SimulationInput {
   readonly decide: DecideFn;
   /** 체결가 결정 함수. null을 반환하면 해당 일 시가로 체결 */
   readonly fillPrice?: (symbol: string, date: string) => number | null;
+  /** 최소 매매 단위 (기본 1주, 코인은 0.00000001개) */
+  readonly lotSize?: number;
 }
 
 export interface SimulationResult {
@@ -85,12 +87,19 @@ function currentWeights(input: SimulationInput, p: Portfolio, date: string): Rec
 interface Order { readonly symbol: string; readonly target: number }
 
 /** 시가에 목표 비중으로 리밸런싱. 매도 먼저, 이후 현금 한도 내 매수 */
+/** 수량을 매매 단위로 내림. 부동소수 오차를 없애려고 단위 개수(정수)로 계산 */
+function roundLots(quantity: number, lot: number): number {
+  const lots = Math.floor(quantity / lot + 1e-9);
+  return lot >= 1 ? lots * lot : Number((lots * lot).toFixed(12));
+}
+
 function execute(input: SimulationInput, p: Portfolio, orders: readonly Order[], date: string): { portfolio: Portfolio; trades: Trade[] } {
+  const lot = input.lotSize ?? 1;
   const slot = portfolioValue(input, p, date, 'open') / input.symbols.length;
   const plans = orders.map((o) => {
     const price = input.fillPrice?.(o.symbol, date) ?? markPrice(input, o.symbol, date, 'open')!;
     const held = p.shares[o.symbol] ?? 0;
-    return { ...o, price, held, delta: Math.floor((slot * o.target) / price) - held };
+    return { ...o, price, held, delta: roundLots((slot * o.target) / price, lot) - held };
   });
   const trades: Trade[] = [];
   let cash = p.cash;
@@ -103,7 +112,7 @@ function execute(input: SimulationInput, p: Portfolio, orders: readonly Order[],
     trades.push({ date, symbol: plan.symbol, side: 'sell', shares: qty, price: plan.price, fee });
   }
   for (const plan of plans.filter((x) => x.delta > 0)) {
-    const affordable = Math.floor(cash / (plan.price * (1 + input.buyFeeRate)));
+    const affordable = roundLots(cash / (plan.price * (1 + input.buyFeeRate)), lot);
     const qty = Math.min(plan.delta, affordable);
     if (qty <= 0) continue;
     const fee = qty * plan.price * input.buyFeeRate;

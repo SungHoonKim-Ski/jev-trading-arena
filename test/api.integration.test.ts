@@ -56,7 +56,9 @@ test('meta: Jev 엔진 가용 여부와 선택지 반환', async () => {
   assert.equal(res.success, true);
   assert.equal(res.data.jevLive, true);
   assert.ok(res.data.strategies.probability);
-  assert.equal(res.data.intervals.length, 4);
+  assert.equal(res.data.markets.US.intervals.length, 4);
+  assert.deepEqual(res.data.markets.CRYPTO.intervals.map((i: { days: number }) => i.days), [1, 7, 14, 30]);
+  assert.equal(res.data.presets.CRYPTO[0].ticker, 'BTC-USD');
 });
 
 test('POST /api/runs → 조합별 실행 → 완료 → 랭킹/통계 반영', async () => {

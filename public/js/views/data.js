@@ -28,8 +28,8 @@ export function render(root) {
       <div class="chips">${specs.map((s) => `<span class="chip">${esc(INTERVAL_LABEL[s.interval])}: 최근 ${s.maxDays + 1}일</span>`).join('')}</div></div>
     <div class="card"><h3 style="margin-top:0">지금 수집</h3>
       <form id="collect-form" class="filters">
-        <label>시장 <select name="market"><option value="KR">한국</option><option value="US">미국</option></select></label>
-        <label>종목 <input type="text" name="tickers" placeholder="005930, 000660 또는 AAPL, NVDA" size="32" /></label>
+        <label>시장 <select name="market"><option value="KR">한국</option><option value="US">미국</option><option value="CRYPTO">코인</option></select></label>
+        <label>종목 <input type="text" name="tickers" placeholder="005930 / AAPL, NVDA / BTC, ETH" size="32" /></label>
         <button class="primary" type="submit">수집</button>
         <span id="collect-msg" class="hint" role="status"></span>
       </form></div>
