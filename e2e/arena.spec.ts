@@ -7,9 +7,13 @@ test('간단 매매: 전략 1개 선택 → 하루씩 재생 → 결과 카드 �
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Jev에게 매매를 맡겨 보세요' })).toBeVisible();
   await expect(page.getByText('Mock 엔진')).toBeVisible();
-  await page.getByRole('button', { name: /등급으로/ }).click();
-  await expect(page.getByRole('button', { name: /등급으로/ })).toHaveAttribute('aria-pressed', 'true');
-  await page.getByRole('button', { name: '6개월' }).click();
+  // 전략은 하나만 고르는 라디오: 다른 전략을 고르면 이전 선택이 풀린다
+  await expect(page.getByRole('radio', { name: /오를까/ })).toBeChecked();
+  await page.getByRole('radio', { name: /등급으로/ }).check();
+  await expect(page.getByRole('radio', { name: /등급으로/ })).toBeChecked();
+  await expect(page.getByRole('radio', { name: /오를까/ })).not.toBeChecked();
+  await expect(page.locator('input[name="strategy"]:checked')).toHaveCount(1);
+  await page.getByRole('radio', { name: '6개월' }).check();
   await page.getByLabel('닉네임').fill('e2e_user');
   await page.getByRole('button', { name: '▶ 매매 시작' }).click();
 
@@ -47,7 +51,7 @@ test('닉네임이 없으면 한국어로 안내', async ({ page }) => {
 
 test('코인: 5종 칩만 제공, 고급 설정의 여러 조합 비교는 결과 표로', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: /코인/ }).click();
+  await page.getByRole('radio', { name: /코인/ }).check();
   await expect(page.locator('#preset-chips .chip')).toHaveCount(5);
   await expect(page.locator('#ticker-input')).toHaveCount(0);
   await page.getByRole('button', { name: '솔라나' }).click();

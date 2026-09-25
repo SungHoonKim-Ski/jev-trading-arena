@@ -81,17 +81,17 @@ function template(m) {
     <p class="lead">종목과 기간, Jev에게 묻는 방식만 고르면 됩니다. 매수·매도가 하루씩 재생되고 랭킹에 기록됩니다.</p></div>
   ${m.jevLive ? '' : '<div class="notice" style="margin-bottom:16px">지금은 API 키가 없어 <b>Mock 엔진</b>으로 매매합니다. Jev와 같은 질문을 받아 규칙으로 답하는 대체 엔진이며, 실제 Jev 결과와 랭킹이 분리됩니다.</div>'}
   <form id="run-form" class="card simple-form" novalidate>
-    <div class="step"><div class="step-label">1. 어떤 시장?</div>
-      <div class="market-cards">${Object.keys(m.markets).map((k) => `<button type="button" class="market-card" data-market="${k}" aria-pressed="${k === state.market}">
-        <span class="emoji" aria-hidden="true">${MARKET_CARDS[k][0]}</span>${esc(MARKET_CARDS[k][1])}</button>`).join('')}</div></div>
+    <fieldset class="step"><legend class="step-label">1. 어떤 시장?</legend>
+      <div class="market-cards">${Object.keys(m.markets).map((k) => `<label class="market-card choice"><input type="radio" name="market" value="${k}" ${k === state.market ? 'checked' : ''} />
+        <span class="dot" aria-hidden="true"></span><span class="emoji" aria-hidden="true">${MARKET_CARDS[k][0]}</span>${esc(MARKET_CARDS[k][1])}</label>`).join('')}</div></fieldset>
     <div class="step"><div class="step-label">2. 무엇을? <span class="hint">최대 5개</span></div>
       <div class="chips" id="preset-chips"></div>
       ${state.market === 'CRYPTO' ? '' : `<div class="row" style="margin-top:8px"><input type="text" id="ticker-input" placeholder="${esc(TICKER_PLACEHOLDER[state.market])}" /><button type="button" class="ghost" id="ticker-add">추가</button></div>`}</div>
-    <div class="step"><div class="step-label">3. 언제부터? <span class="hint">어제까지</span></div>
-      <div class="chips">${PERIODS.map(([mo, l]) => `<button type="button" class="chip big ${mo === state.months ? 'on' : ''}" data-months="${mo}" aria-pressed="${mo === state.months}">${l}</button>`).join('')}</div></div>
-    <div class="step"><div class="step-label">4. Jev에게 어떻게 물을까?</div>
-      <div class="strategy-cards">${Object.entries(m.strategies).map(([k, v]) => `<button type="button" class="strategy-card" data-strategy="${k}" aria-pressed="${k === state.strategy}">
-        <b>${esc(STRATEGY_FRIENDLY[k])}</b><span>${esc(v.description)}</span></button>`).join('')}</div></div>
+    <fieldset class="step"><legend class="step-label">3. 언제부터? <span class="hint">어제까지</span></legend>
+      <div class="chips">${PERIODS.map(([mo, l]) => `<label class="chip big choice"><input type="radio" name="months" value="${mo}" ${mo === state.months ? 'checked' : ''} /><span class="dot" aria-hidden="true"></span>${l}</label>`).join('')}</div></fieldset>
+    <fieldset class="step"><legend class="step-label">4. Jev에게 어떻게 물을까? <span class="hint">하나를 고르세요</span></legend>
+      <div class="strategy-cards">${Object.entries(m.strategies).map(([k, v]) => `<label class="strategy-card choice"><input type="radio" name="strategy" value="${k}" ${k === state.strategy ? 'checked' : ''} />
+        <span class="dot" aria-hidden="true"></span><b>${esc(STRATEGY_FRIENDLY[k])}</b><span class="desc">${esc(v.description)}</span></label>`).join('')}</div></fieldset>
     <div class="start-bar">
       <label class="nick">닉네임 <input type="text" name="nickname" maxlength="20" required value="${esc(readNick())}" placeholder="랭킹에 표시될 이름" /></label>
       <button class="primary start" type="submit">▶ 매매 시작</button>
@@ -124,7 +124,7 @@ function formValues(form) {
     initialCapital: Number(fd.get('initialCapital')),
     engine: form.querySelector('[data-engine][aria-pressed="true"]')?.dataset.engine ?? 'mock',
     execution: form.querySelector('[data-execution][aria-pressed="true"]')?.dataset.execution ?? 'open',
-    strategies: compare ? all('strategies') : [state.strategy],
+    strategies: compare ? all('strategies') : [String(fd.get('strategy') ?? state.strategy)],
     efforts: compare ? all('efforts') : [String(fd.get('effort') ?? EFFORT_DEFAULT)],
     intervals: (compare ? all('intervals') : [String(fd.get('interval'))]).map(Number),
     compare,
@@ -149,11 +149,11 @@ function pressOne(root, selector, target) {
 }
 
 function bindChoices(root, m, form, onOpenRun) {
-  root.querySelectorAll('[data-market]').forEach((b) => b.addEventListener('click', () => { state.market = b.dataset.market; render(root, onOpenRun); }));
-  root.querySelectorAll('[data-strategy]').forEach((b) => b.addEventListener('click', () => { state.strategy = b.dataset.strategy; pressOne(root, '[data-strategy]', b); }));
-  root.querySelectorAll('[data-months]').forEach((b) => b.addEventListener('click', () => {
-    state.months = Number(b.dataset.months);
-    root.querySelectorAll('[data-months]').forEach((x) => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-pressed', String(on)); });
+  // 시장·기간·전략은 하나만 고르는 라디오 버튼
+  form.querySelectorAll('input[name="market"]').forEach((r) => r.addEventListener('change', () => { state.market = r.value; render(root, onOpenRun); }));
+  form.querySelectorAll('input[name="strategy"]').forEach((r) => r.addEventListener('change', () => { state.strategy = r.value; }));
+  form.querySelectorAll('input[name="months"]').forEach((r) => r.addEventListener('change', () => {
+    state.months = Number(r.value);
     form.startDate.value = monthsAgo(state.months);
     form.endDate.value = yesterday();
   }));
