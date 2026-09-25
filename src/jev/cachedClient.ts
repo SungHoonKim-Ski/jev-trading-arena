@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto';
 import type { JevClient, JevRequest, JevResponse } from './types.ts';
 
 export interface JevCacheStore {
-  get(key: string): string | null;
-  set(key: string, model: string, value: string): void;
+  get(key: string): Promise<string | null>;
+  set(key: string, model: string, value: string): Promise<void>;
 }
 
 /**
@@ -23,13 +23,13 @@ export class CachedJevClient implements JevClient {
 
   async evaluate(request: JevRequest): Promise<JevResponse> {
     const key = createHash('sha256').update(JSON.stringify(request)).digest('hex');
-    const hit = this.#store.get(key);
+    const hit = await this.#store.get(key);
     if (hit) {
       const res = JSON.parse(hit) as JevResponse;
       return { ...res, usage: { input_tokens: 0, output_tokens: 0 }, cached: true };
     }
     const res = await this.#inner.evaluate(request);
-    this.#store.set(key, res.model, JSON.stringify(res));
+    await this.#store.set(key, res.model, JSON.stringify(res));
     return res;
   }
 }

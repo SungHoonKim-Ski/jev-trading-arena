@@ -7,7 +7,7 @@ import { buildJevRequest } from '../jev/questions.ts';
 import type { JevClient } from '../jev/types.ts';
 import type { AssetDecision, Bar, RunParams, Trade } from '../types.ts';
 import { logger } from '../logger.ts';
-import type { IntradayRepository } from '../db/intradayRepository.ts';
+import type { IntradayDay, IntradayRepository } from '../db/intradayRepository.ts';
 import type { IntradayCollector } from '../market/intradayCollector.ts';
 import { adjustedFill } from '../market/intraday.ts';
 import { simulate, type DecideContext } from './engine.ts';
@@ -73,7 +73,7 @@ function makeDecider(params: RunParams, symbols: readonly SymbolBars[], jev: Jev
       decisions.push({ date: ctx.date, symbol: s.symbol, ...d });
       targets[s.symbol] = d.targetWeight;
     }
-    if (ctx.step % 5 === 0) deps.runs.setProgress(runId, 0.1 + 0.85 * ((ctx.step + 1) / Math.max(1, ctx.totalSteps)));
+    if (ctx.step % 5 === 0) await deps.runs.setProgress(runId, 0.1 + 0.85 * ((ctx.step + 1) / Math.max(1, ctx.totalSteps)));
     return targets;
   };
   return { decide, decisions, usage };
@@ -91,23 +91,29 @@ function indexSeries(indexBars: readonly Bar[], dates: readonly string[], capita
 }
 
 interface FillStats { readonly intraday: number; readonly fallback: number }
+type IntradayBySymbol = ReadonlyMap<string, ReadonlyMap<string, IntradayDay>>;
+
+async function loadIntradayDays(symbols: readonly SymbolBars[], params: RunParams, intraday: IntradayRepository): Promise<IntradayBySymbol> {
+  const entries = await Promise.all(symbols.map(async (s) => [s.symbol, await intraday.getFinestDays(s.symbol, params.startDate, params.endDate)] as const));
+  return new Map(entries);
+}
 
 /**
- * VWAP 체결가 함수: 체결일 분봉(가장 촘촘한 간격)이 DB에 있으면 수정주가로 환산한 세션 VWAP,
+ * VWAP 체결가 함수: 체결일 분봉(가장 촘촘한 완전한 간격)이 있으면 수정주가로 환산한 세션 VWAP,
  * 없으면 일봉 평균가 (O+H+L+C)/4 로 대체한다.
  */
-function makeVwapFill(symbols: readonly SymbolBars[], intraday: IntradayRepository) {
+function makeVwapFill(symbols: readonly SymbolBars[], days: IntradayBySymbol) {
   const barByDate = new Map(symbols.map((s) => [s.symbol, new Map(s.bars.map((b) => [b.date, b]))]));
   return (symbol: string, date: string): number | null => {
     const bar = barByDate.get(symbol)?.get(date);
     if (!bar) return null;
-    return adjustedFill(bar.open, intraday.getFinestDay(symbol, date).bars) ?? (bar.open + bar.high + bar.low + bar.close) / 4;
+    return adjustedFill(bar.open, days.get(symbol)?.get(date)?.bars ?? []) ?? (bar.open + bar.high + bar.low + bar.close) / 4;
   };
 }
 
 /** 실제 체결된 거래 중 분봉 VWAP으로 체결된 건수 */
-function countFills(trades: readonly Trade[], intraday: IntradayRepository): FillStats {
-  const intradayCount = trades.filter((t) => intraday.getFinestDay(t.symbol, t.date).bars.length > 0).length;
+function countFills(trades: readonly Trade[], days: IntradayBySymbol): FillStats {
+  const intradayCount = trades.filter((t) => (days.get(t.symbol)?.get(t.date)?.bars.length ?? 0) > 0).length;
   return { intraday: intradayCount, fallback: trades.length - intradayCount };
 }
 
@@ -122,16 +128,18 @@ async function ensureIntraday(symbols: readonly SymbolBars[], collector: Intrada
 
 /** 한 번의 백테스트 실행 전체: 시세 → 지표 → Jev 결정 → 시뮬레이션 → 지표 저장 */
 export async function executeRun(runId: number, deps: RunnerDeps): Promise<void> {
-  const params = deps.runs.getParams(runId);
+  const params = await deps.runs.getParams(runId);
   if (!params) throw new Error(`run ${runId} not found`);
-  deps.runs.setStatus(runId, 'running');
-  deps.runs.setProgress(runId, 0.02);
+  // 다른 인스턴스가 이미 가져간 실행이면 건너뛴다
+  if (!(await deps.runs.claim(runId))) return;
+  await deps.runs.setProgress(runId, 0.02);
 
   const symbols = await loadSymbols(params, deps.prices);
-  deps.runs.setSymbolNames(runId, Object.fromEntries(symbols.map((s) => [s.symbol, s.name])));
+  await deps.runs.setSymbolNames(runId, Object.fromEntries(symbols.map((s) => [s.symbol, s.name])));
   const indexBars = await loadIndex(params, deps.prices);
   if (params.execution === 'vwap') await ensureIntraday(symbols, deps.collector);
-  deps.runs.setProgress(runId, 0.1);
+  const intradayDays = params.execution === 'vwap' ? await loadIntradayDays(symbols, params, deps.intraday) : new Map();
+  await deps.runs.setProgress(runId, 0.1);
 
   const market = MARKETS[params.market];
   const { decide, decisions, usage } = makeDecider(params, symbols, deps.jevFor(params.engine), deps, runId);
@@ -139,14 +147,14 @@ export async function executeRun(runId: number, deps: RunnerDeps): Promise<void>
     symbols: symbols.map((s) => s.symbol), bars: Object.fromEntries(symbols.map((s) => [s.symbol, s.bars])),
     startDate: params.startDate, endDate: params.endDate, intervalDays: params.intervalDays,
     initialCapital: params.initialCapital, buyFeeRate: market.buyFeeRate, sellFeeRate: market.sellFeeRate, decide,
-    fillPrice: params.execution === 'vwap' ? makeVwapFill(symbols, deps.intraday) : undefined,
+    fillPrice: params.execution === 'vwap' ? makeVwapFill(symbols, intradayDays) : undefined,
   });
 
-  const fills = params.execution === 'vwap' ? countFills(sim.trades, deps.intraday) : null;
+  const fills = params.execution === 'vwap' ? countFills(sim.trades, intradayDays) : null;
   const idx = indexSeries(indexBars, sim.equity.map((p) => p.date), params.initialCapital);
   const metrics = computeMetrics(sim.equity, sim.trades, params.initialCapital);
   const lastIdx = idx.findLast((v) => v !== null) ?? null;
-  deps.runs.complete(runId, {
+  await deps.runs.complete(runId, {
     equity: sim.equity.map((p, i) => ({ ...p, index: idx[i] })),
     trades: sim.trades,
     decisions,

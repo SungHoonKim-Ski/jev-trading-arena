@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseIntraday, sessionVwap, adjustedFill, collectionWindows, INTRADAY_SPECS, REFETCH_OVERLAP_SEC } from '../src/market/intraday.ts';
-import { openDatabase } from '../src/db/database.ts';
+import { openLocalDatabase } from '../src/db/client.node.ts';
 import { IntradayRepository } from '../src/db/intradayRepository.ts';
 import { IntradayCollector, type IntradayFetcher } from '../src/market/intradayCollector.ts';
 
@@ -53,31 +53,31 @@ test('collectionWindows: 저장된 마지막 시점 이후만, 청크 단위로'
   assert.deepEqual(partial, [[now - 600 - REFETCH_OVERLAP_SEC, now]], '마지막 구간은 겹쳐서 재수집');
 });
 
-test('IntradayRepository: 가장 촘촘한 분봉 우선 조회 + 커버리지 요약', () => {
-  const repo = new IntradayRepository(openDatabase(':memory:'));
+test('IntradayRepository: 가장 촘촘한 분봉 우선 조회 + 커버리지 요약', async () => {
+  const repo = new IntradayRepository(await openLocalDatabase(':memory:'));
   const bars = parseIntraday(FIXTURE);
-  repo.upsert('AAPL', '60m', bars.slice(0, 1));
-  repo.upsert('AAPL', '1m', bars);
-  repo.upsert('AAPL', '1m', bars); // 중복 저장은 무시
-  const day = repo.getFinestDay('AAPL', '2025-01-02');
+  await repo.upsert('AAPL', '60m', bars.slice(0, 1));
+  await repo.upsert('AAPL', '1m', bars);
+  await repo.upsert('AAPL', '1m', bars); // 중복 저장은 무시
+  const day = await repo.getFinestDay('AAPL', '2025-01-02');
   assert.equal(day.interval, '1m');
   assert.equal(day.bars.length, 2);
-  assert.equal(repo.getFinestDay('AAPL', '2025-01-03').bars.length, 0);
+  assert.equal((await repo.getFinestDay('AAPL', '2025-01-03')).bars.length, 0);
   // 장 중간부터 잘린 1분봉(첫 분봉이 60분봉보다 늦음)은 건너뛰고 60분봉 사용
   const early = { ...bars[0]!, ts: bars[0]!.ts - 3600, date: '2025-01-06' };
-  repo.upsert('AAPL', '60m', [early]);
-  repo.upsert('AAPL', '1m', [{ ...bars[0]!, date: '2025-01-06' }]);
-  assert.equal(repo.getFinestDay('AAPL', '2025-01-06').interval, '60m');
+  await repo.upsert('AAPL', '60m', [early]);
+  await repo.upsert('AAPL', '1m', [{ ...bars[0]!, date: '2025-01-06' }]);
+  assert.equal((await repo.getFinestDay('AAPL', '2025-01-06')).interval, '60m');
   // 같은 시각 분봉은 최신 값으로 갱신
-  repo.upsert('AAPL', '1m', [{ ...bars[0]!, close: 999 }]);
-  assert.equal(repo.getFinestDay('AAPL', '2025-01-02').bars[0]!.close, 999);
-  const cov = repo.coverage();
+  await repo.upsert('AAPL', '1m', [{ ...bars[0]!, close: 999 }]);
+  assert.equal((await repo.getFinestDay('AAPL', '2025-01-02')).bars[0]!.close, 999);
+  const cov = await repo.coverage();
   assert.equal(cov.find((c) => c.interval === '1m')!.bars, 2);
-  assert.equal(repo.lastTs('AAPL', '1m'), 1735828260);
+  assert.equal(await repo.lastTs('AAPL', '1m'), 1735828260);
 });
 
 test('IntradayCollector: 간격별 수집·저장, 한 간격 실패해도 나머지 계속', async () => {
-  const repo = new IntradayRepository(openDatabase(':memory:'));
+  const repo = new IntradayRepository(await openLocalDatabase(':memory:'));
   const calls: string[] = [];
   const fetcher: IntradayFetcher = async (symbol, interval) => {
     calls.push(interval);
@@ -89,5 +89,5 @@ test('IntradayCollector: 간격별 수집·저장, 한 간격 실패해도 나�
   assert.equal(result.errors.length, 1);
   assert.ok(result.saved['1m']! >= 2);
   assert.ok(calls.includes('60m'));
-  assert.equal(repo.getFinestDay('AAPL', '2025-01-02').interval, '1m');
+  assert.equal((await repo.getFinestDay('AAPL', '2025-01-02')).interval, '1m');
 });

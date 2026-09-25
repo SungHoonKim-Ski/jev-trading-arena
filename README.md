@@ -28,7 +28,8 @@ TypeSafe의 판단 전용 모델 **Jev**에게 매매 판단을 맡겨 한국·�
 
 ## 사용 편의성: 준비 없이 쓸 수 있나
 
-- **설치 한 번**: Node.js 24 이상에서 `npm install` 후 `npm start`로 끝납니다. 별도 DB 서버가 필요 없습니다(SQLite 파일 자동 생성).
+- **설치 한 번**: Node.js 22.18 이상에서 `npm install` 후 `npm start`로 끝납니다. 별도 DB 서버가 필요 없습니다(SQLite 파일 자동 생성).
+- **설치 없이 웹으로**: GitHub Pages와 Vercel에 배포돼 있어 브라우저만 있으면 됩니다.
 - **API 키 없이도 동작**: TypeSafe 키가 없으면 Mock 엔진으로 전체 흐름을 체험할 수 있습니다. 키를 넣으면 실제 Jev로 바뀝니다. 두 결과는 랭킹에서 분리됩니다.
 - **기본값이 준비돼 있음**: 인기 종목 칩, "최근 1년" 같은 기간 버튼, 시장별 기본 자본금과 수수료·세금이 미리 설정돼 있습니다. 닉네임만 넣고 실행을 누르면 됩니다.
 - **반복 조작 없음**: 여러 전략을 한 번에 실행합니다. 결과는 실시간으로 갱신되고, 닉네임은 브라우저에 기억됩니다. 분봉은 서버가 알아서 주기적으로 수집합니다.
@@ -50,6 +51,37 @@ TYPESAFE_API_KEY=... npm start             # 실제 Jev 사용
 | `DB_PATH` | `data/trading.db` | |
 | `INTRADAY_COLLECT` | 켜짐 | `off`면 분봉 주기 수집 중지 |
 | `INTRADAY_COLLECT_EVERY_MS` | 6시간 | 분봉 수집 주기 |
+
+## 배포
+
+```
+GitHub Pages (정적 화면)  ──API 호출(CORS)──▶  Vercel 서버리스 함수 (/api/*)  ──▶  Turso (libSQL, 원격 SQLite)
+                                              └ 일일 크론: 분봉 수집 + 멈춘 실행 복구
+```
+
+- **Vercel**: `npm run build:vercel`이 Build Output API 산출물(화면 + API 함수 + 크론)을 만듭니다. 백테스트는 응답 후 `waitUntil`로 끝까지 실행합니다. 함수가 시간 초과로 끊긴 실행은 크론이 다시 돌립니다.
+- **GitHub Pages**: `main`에 `public/`이 바뀌면 워크플로가 배포합니다. 저장소 변수 `API_BASE_URL`에 Vercel 주소를 넣으면 화면이 그 API를 씁니다.
+- **DB**: 로컬은 SQLite 파일, 배포는 Turso를 씁니다. SQL과 코드는 같습니다(`@libsql/client`).
+
+Vercel 프로젝트 환경 변수:
+
+| 이름 | 설명 |
+|---|---|
+| `TURSO_DATABASE_URL` | `libsql://<db>-<org>.turso.io` |
+| `TURSO_AUTH_TOKEN` | Turso DB 토큰 |
+| `CRON_SECRET` | 크론 호출 인증용 임의 문자열 (Vercel이 자동으로 헤더에 넣음) |
+| `TYPESAFE_API_KEY` | 선택. 있으면 실제 Jev 사용 |
+| `ALLOWED_ORIGINS` | 선택. 기본 `*`. 예: `https://<user>.github.io` |
+
+배포 명령:
+
+```bash
+npx vercel login
+npx vercel link --yes --project jev-trading-arena
+npx vercel env add TURSO_DATABASE_URL production   # 나머지 변수도 같은 방식
+npx vercel deploy --prod
+gh variable set API_BASE_URL --body "https://<vercel-주소>"   # Pages 화면이 사용할 API
+```
 
 ## 핵심 개념
 
@@ -94,8 +126,9 @@ src/
   market/     시세 수집(yahoo, intraday), 지표→라벨 변환(features), DB 캐시(priceService), 분봉 수집기
   jev/        TypeSafe HTTP 클라이언트(재시도·검증), Mock, 캐시, 질문 생성, 응답 해석
   backtest/   순수 시뮬레이션 엔진, 성과 지표, 실행기, 동시 실행 제한 대기열
-  db/         SQLite 스키마·마이그레이션, 저장소(시세·분봉·실행·Jev 캐시)
-  api/        라우터, zod 입력 검증, 레이트리밋, 정적 파일
+  db/         libSQL 스키마·마이그레이션, 로컬/원격 연결, 저장소(시세·분봉·실행·Jev 캐시)
+  api/        라우터, zod 입력 검증, 레이트리밋, CORS, 정적 파일
+  vercel/     서버리스 진입점 (Turso 연결, waitUntil)
 public/       바닐라 JS 화면 (실행, 랭킹, 전략 분석, 내 기록, 데이터, 상세)
 test/         단위·통합 테스트 (node:test)
 e2e/          Playwright E2E (가짜 시세 서버 사용)
@@ -113,13 +146,14 @@ e2e/          Playwright E2E (가짜 시세 서버 사용)
 | GET | `/api/stats?...` | 전략×effort×주기별 평균 성과 |
 | GET | `/api/data/coverage` | 수집된 분봉 현황 |
 | POST | `/api/data/collect` | 분봉 즉시 수집 |
+| GET | `/api/cron/tick` | 크론 전용 (`CRON_SECRET` 필요) |
 
 모든 응답은 `{ success, data, error }` 형태입니다.
 
 ## 테스트
 
 ```bash
-npm test          # 단위 + 통합 (52개)
+npm test          # 단위 + 통합 (62개)
 npm run coverage  # 라인 커버리지 약 98%
 npm run e2e       # Playwright (최초 1회 npx playwright install chromium)
 npm run typecheck

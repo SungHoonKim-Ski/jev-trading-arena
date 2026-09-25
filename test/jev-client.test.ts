@@ -72,7 +72,7 @@ test('CachedJevClient: 같은 요청은 한 번만 호출', async () => {
   let n = 0;
   const inner: JevClient = { mode: 'live', evaluate: async () => { n++; return OK_BODY; } };
   const store = new Map<string, string>();
-  const cached = new CachedJevClient(inner, { get: (k) => store.get(k) ?? null, set: (k, _m, v) => { store.set(k, v); } });
+  const cached = new CachedJevClient(inner, { get: async (k) => store.get(k) ?? null, set: async (k, _m, v) => { store.set(k, v); } });
   const r1 = await cached.evaluate(REQ);
   const r2 = await cached.evaluate(REQ);
   assert.equal(n, 1);

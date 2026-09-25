@@ -1,5 +1,6 @@
 /** E2E 전용 서버: 외부 네트워크 없이 결정적인 가짜 시세 + Mock Jev 사용 */
-import { openDatabase } from '../src/db/database.ts';
+import { createServer } from 'node:http';
+import { openLocalDatabase } from '../src/db/client.node.ts';
 import { createApp } from '../src/app.ts';
 import type { BarFetcher } from '../src/market/priceService.ts';
 import type { IntradayFetcher } from '../src/market/intradayCollector.ts';
@@ -15,5 +16,5 @@ const fetcher: BarFetcher = async (_market, input, from, to) => {
 };
 const intradayFetcher: IntradayFetcher = async () => [];
 
-const app = createApp({ db: openDatabase(':memory:'), fetcher, liveJev: null, intradayFetcher });
-app.server.listen(Number(process.env.PORT ?? 3199));
+const app = createApp({ db: await openLocalDatabase(':memory:'), fetcher, liveJev: null, intradayFetcher });
+createServer((req, res) => { void app.handle(req, res); }).listen(Number(process.env.PORT ?? 3199));

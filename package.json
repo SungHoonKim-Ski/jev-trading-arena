@@ -5,7 +5,7 @@
   "description": "Jev(TypeSafe System One) 기반 한국/미국 주식 모의 트레이딩 백테스트 + 랭킹",
   "type": "module",
   "engines": {
-    "node": ">=24"
+    "node": ">=22.18"
   },
   "scripts": {
     "start": "node src/server.ts",
@@ -14,14 +14,18 @@
     "coverage": "node --test --experimental-test-coverage --test-coverage-exclude='test/**' --test-coverage-exclude='node_modules/**' 'test/**/*.test.ts'",
     "typecheck": "tsc --noEmit",
     "collect": "node src/cli/collect.ts",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "build:vercel": "node scripts/build-vercel.mjs"
   },
   "dependencies": {
+    "@libsql/client": "^0.18.0",
+    "@vercel/functions": "^3.9.9",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "@types/node": "^26.6.2",
+    "esbuild": "^0.28.2",
     "typescript": "^7.0.2"
   }
 }

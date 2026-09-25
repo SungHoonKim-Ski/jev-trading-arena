@@ -36,11 +36,8 @@ export class RunQueue {
         .catch((err: unknown) => {
           const message = err instanceof Error ? err.message : String(err);
           logger.error('queue', `run ${id} failed`, err);
-          try {
-            this.#runs.setStatus(id, 'failed', message.slice(0, 500));
-          } catch (dbErr) {
-            logger.error('queue', `could not mark run ${id} as failed`, dbErr);
-          }
+          return this.#runs.setStatus(id, 'failed', message.slice(0, 500))
+            .catch((dbErr: unknown) => logger.error('queue', `could not mark run ${id} as failed`, dbErr));
         })
         .finally(() => {
           this.#active.delete(id);

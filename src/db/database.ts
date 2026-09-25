@@ -1,6 +1,8 @@
-import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
-import path from 'node:path';
+import type { Client, InStatement, InValue } from '@libsql/client';
+
+/** libSQL 클라이언트 (로컬 파일/메모리 또는 Turso 원격) */
+export type Db = Client;
+export type SqlArg = InValue;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS symbols (
@@ -89,38 +91,40 @@ CREATE TABLE IF NOT EXISTS jev_cache (
 );
 `;
 
-export function openDatabase(file: string): DatabaseSync {
-  if (file !== ':memory:') mkdirSync(path.dirname(file), { recursive: true });
-  const db = new DatabaseSync(file);
-  db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
-  db.exec(SCHEMA);
-  migrate(db);
-  return db;
-}
-
 /** 기존 DB에 새 컬럼 추가 (CREATE TABLE IF NOT EXISTS로는 반영되지 않음) */
 const COLUMN_MIGRATIONS: readonly [table: string, column: string, ddl: string][] = [
   ['runs', 'execution', "ALTER TABLE runs ADD COLUMN execution TEXT NOT NULL DEFAULT 'open'"],
   ['runs', 'intraday_fills', 'ALTER TABLE runs ADD COLUMN intraday_fills INTEGER'],
   ['runs', 'fallback_fills', 'ALTER TABLE runs ADD COLUMN fallback_fills INTEGER'],
+  ['runs', 'started_at', 'ALTER TABLE runs ADD COLUMN started_at TEXT'],
 ];
 
-function migrate(db: DatabaseSync): void {
+async function migrate(db: Db): Promise<void> {
   for (const [table, column, ddl] of COLUMN_MIGRATIONS) {
-    const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
-    if (!cols.some((c) => c.name === column)) db.exec(ddl);
+    const cols = (await db.execute(`PRAGMA table_info(${table})`)).rows as unknown as { name: string }[];
+    if (!cols.some((c) => c.name === column)) await db.execute(ddl);
   }
 }
 
-/** 여러 쓰기를 하나의 트랜잭션으로 묶는다 */
-export function transaction<T>(db: DatabaseSync, fn: () => T): T {
-  db.exec('BEGIN');
-  try {
-    const result = fn();
-    db.exec('COMMIT');
-    return result;
-  } catch (err) {
-    db.exec('ROLLBACK');
-    throw err;
+export async function initDatabase(db: Db): Promise<Db> {
+  await db.executeMultiple(SCHEMA);
+  await migrate(db);
+  return db;
+}
+
+const BATCH_SIZE = 400;
+
+/** 여러 쓰기를 트랜잭션 배치로 실행 (원격 DB 왕복 횟수 절약) */
+export async function writeBatch(db: Db, statements: readonly InStatement[]): Promise<void> {
+  for (let i = 0; i < statements.length; i += BATCH_SIZE) {
+    await db.batch(statements.slice(i, i + BATCH_SIZE) as InStatement[], 'write');
   }
+}
+
+export async function queryAll<T>(db: Db, sql: string, args: readonly SqlArg[] = []): Promise<T[]> {
+  return (await db.execute({ sql, args: args as SqlArg[] })).rows.map((r) => ({ ...r }) as T);
+}
+
+export async function queryOne<T>(db: Db, sql: string, args: readonly SqlArg[] = []): Promise<T | null> {
+  return (await queryAll<T>(db, sql, args))[0] ?? null;
 }
