@@ -7,6 +7,7 @@ import { buildJevRequest } from '../jev/questions.ts';
 import type { JevClient } from '../jev/types.ts';
 import type { AssetDecision, Bar, RunParams, Trade } from '../types.ts';
 import { logger } from '../logger.ts';
+import { koreanName } from '../market/presets.ts';
 import type { IntradayDay, IntradayRepository } from '../db/intradayRepository.ts';
 import type { IntradayCollector } from '../market/intradayCollector.ts';
 import type { TickStore } from '../ticks/types.ts';
@@ -128,7 +129,7 @@ export async function executeRun(runId: number, deps: RunnerDeps): Promise<void>
   await deps.runs.setProgress(runId, 0.02);
 
   const symbols = await loadSymbols(params, deps.prices);
-  await deps.runs.setSymbolNames(runId, Object.fromEntries(symbols.map((s) => [s.symbol, s.name])));
+  await deps.runs.setSymbolNames(runId, Object.fromEntries(symbols.map((s) => [s.symbol, koreanName(s.symbol, s.name)])));
   const indexBars = await loadIndex(params, deps.prices);
   // 주식 분봉은 Yahoo에서 최근분을 먼저 수집 (코인은 체결일마다 바이낸스에서 받는다)
   if (params.execution !== 'open' && params.market !== 'CRYPTO') await ensureIntraday(symbols, deps.collector);

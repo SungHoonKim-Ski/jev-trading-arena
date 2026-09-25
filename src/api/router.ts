@@ -5,7 +5,7 @@ import type { RunRepository } from '../db/runRepository.ts';
 import type { RunQueue } from '../backtest/queue.ts';
 import type { Effort, RunParams, Strategy } from '../types.ts';
 import { clientIp, fail, HttpError, ok, RateLimiter, readJson } from './http.ts';
-import { TICKER_PRESETS } from './presets.ts';
+import { TICKER_PRESETS } from '../market/presets.ts';
 import { logger } from '../logger.ts';
 import { serveStatic } from './staticFiles.ts';
 import { collectSchema, createRunSchema, formatZodError, rankQuerySchema, tickCollectSchema, type CreateRunInput } from './validation.ts';

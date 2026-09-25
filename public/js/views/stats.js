@@ -5,7 +5,7 @@ import { filterBar, readFilters } from './filters.js';
 
 let filters = { engine: '' };
 let metric = 'avg_excess';
-const METRICS = { avg_excess: ['보유 대비 평균 초과수익', pct], avg_return: ['평균 수익률', pct], avg_sharpe: ['평균 Sharpe', (v) => num(v)] };
+const METRICS = { avg_excess: ['그냥 보유보다 더 번 정도 (평균)', pct], avg_return: ['평균 수익률', pct], avg_sharpe: ['평균 Sharpe', (v) => num(v)] };
 
 /** 확신 기준(행) × 다른 축(열)으로 재집계 (실행 수 가중 평균) */
 function pivot(rows, rowValues, colOf, colValues) {
@@ -33,7 +33,7 @@ function headline(rows) {
 
 function comboTable(rows) {
   return `<div class="table-wrap"><table><thead><tr><th>확신 기준</th><th>effort</th><th>주기</th><th class="num">실행</th><th class="num">사용자</th>
-    <th class="num">평균 수익률</th><th class="num">최고 수익률</th><th class="num">평균 초과수익</th><th class="num">보유 대비 승률</th>
+    <th class="num">평균 수익률</th><th class="num">최고 수익률</th><th class="num">그냥 보유보다 (평균)</th><th class="num">보유를 이긴 비율</th>
     <th class="num">평균 Sharpe</th><th class="num">평균 MDD</th><th class="num">평균 거래</th><th class="num">평균 Jev 비용</th></tr></thead>
     <tbody>${rows.map((r) => `<tr><td>${esc(thresholdLabel(r.threshold))}</td><td>${esc(effortLabel(r.effort))}</td><td>${esc(intervalLabel(r.interval_days))}</td>
       <td class="num">${r.runs}</td><td class="num">${r.users}</td><td class="num">${signed(r.avg_return)}</td><td class="num">${signed(r.best_return)}</td>

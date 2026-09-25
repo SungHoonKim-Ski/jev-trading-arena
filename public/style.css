@@ -356,3 +356,5 @@ label.chip.choice:has(input:checked) .dot { border-color: var(--accent-ink); bac
   .rank-row { grid-template-columns: 32px minmax(0, 1fr) auto; padding: 10px 12px; }
 }
 @media (prefers-reduced-motion: reduce) { .podium-card { transition: none; } }
+
+.muted { color: var(--text-2); }

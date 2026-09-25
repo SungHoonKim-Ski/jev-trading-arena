@@ -91,3 +91,16 @@ test('recoverStale: 오래 멈춘 running만 대기열로 되돌림', async () =
   assert.deepEqual(await repo.recoverStale(60_000, 10), [waiting]);
   assert.deepEqual(await repo.recoverStale(-1, 10), [stuck, fresh, waiting]);
 });
+
+test('leaderboard current: 이전 방식·이전 규칙(기준 없음) 기록 제외', async () => {
+  const db = await openLocalDatabase(':memory:');
+  const repo = new RunRepository(db);
+  const done = async (p: Partial<RunParams>) => { const id = await repo.create({ ...PARAMS, ...p }, 'g'); await repo.complete(id, artifacts(0.1)); return id; };
+  const now = await done({ nickname: 'now' });
+  const legacyStrategy = await done({ nickname: 'old3', strategy: 'score' });
+  const legacyRule = await done({ nickname: 'oldrule' });
+  await db.execute({ sql: 'UPDATE runs SET threshold = NULL WHERE id = ?', args: [legacyRule] }); // 기준 도입 전 기록
+  assert.equal((await repo.leaderboard({}, 'total_return', 10, false)).length, 3);
+  const ids = (await repo.leaderboard({ current: true }, 'total_return', 10, false)).map((r) => r.id);
+  assert.deepEqual(ids, [now]);
+});

@@ -76,7 +76,7 @@ test('POST /api/runs → 조합별 실행 → 완료 → 랭킹/통계 반영', 
   assert.equal(typeof detail.run.total_return, 'number');
   assert.equal(detail.run.engine, 'mock');
   assert.equal(detail.run.jev_cost_usd, 0);
-  assert.equal(detail.run.symbol_names.AAPL, 'Fake AAPL');
+  assert.equal(detail.run.symbol_names.AAPL, '애플', '새 실행은 한국어 이름으로 저장');
   assert.ok(detail.prices.AAPL.length > 100, '재생용 가격 포함');
   assert.ok(detail.prices.AAPL.every((b: { date: string }) => b.date >= detail.run.start_date && b.date <= detail.run.end_date));
   assert.equal(typeof detail.prices.MSFT[0].close, 'number');

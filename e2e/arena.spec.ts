@@ -44,9 +44,12 @@ test('간단 매매: 전략 1개 선택 → 하루씩 재생 → 결과 카드 �
   await page.getByRole('link', { name: '랭킹', exact: true }).first().click();
   // 1위 시상대 카드, 내 순위 카드
   await expect(page.locator('.podium-card.place-1')).toContainText('e2e_user');
+  await expect(page.locator('.podium-card.place-1')).toContainText('S&P 500 (SPY)'); // 종목명은 한국어 프리셋 이름
+  await expect(page.locator('.podium-card.place-1')).toContainText('그냥 보유했으면');
+  await expect(page.locator('#rank-board')).not.toContainText('뒤처짐');
   await expect(page.locator('.my-rank')).toContainText('1위');
   await expect(page.locator('.my-rank')).toContainText('지금 1위예요');
-  await page.getByRole('radio', { name: '보유 대비' }).check();
+  await page.getByRole('radio', { name: '보유보다 더 번 순' }).check();
   await expect(page.locator('.podium-card.place-1 .big')).toContainText('%p');
   await page.getByRole('radio', { name: /코인/ }).check();
   await expect(page.locator('#rank-board')).toContainText('아직 이 조건의 기록이 없어요');
@@ -88,5 +91,5 @@ test('코인: 5종 칩만 제공, 고급 설정의 여러 조합 비교는 결�
   await expect(result.locator('tbody tr')).toHaveCount(2);
   await result.locator('tbody tr').first().click();
   await expect(page).toHaveURL(/#play\/\d+/);
-  await expect(page.locator('#sym-tabs')).toContainText('SOLUSDT');
+  await expect(page.locator('#sym-tabs')).toContainText('솔라나');
 });
