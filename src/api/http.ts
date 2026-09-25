@@ -35,6 +35,16 @@ export async function readJson(req: IncomingMessage): Promise<unknown> {
 }
 
 /** IP별 고정 윈도우 레이트리밋 */
+/** 요청자 IP. 프록시를 믿을 때만 X-Forwarded-For의 첫 주소를 쓴다 (직접 노출 시 헤더 위조로 제한 우회 방지) */
+export function clientIp(req: IncomingMessage, trustProxy: boolean): string {
+  if (trustProxy) {
+    const forwarded = req.headers['x-forwarded-for'];
+    const first = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',')[0]?.trim();
+    if (first) return first;
+  }
+  return req.socket.remoteAddress || 'unknown';
+}
+
 export class RateLimiter {
   readonly #hits = new Map<string, { count: number; resetAt: number }>();
   readonly #max: number;

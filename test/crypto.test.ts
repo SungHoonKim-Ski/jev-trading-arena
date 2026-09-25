@@ -9,9 +9,10 @@ import { createRunSchema } from '../src/api/validation.ts';
 import { MARKETS } from '../src/config.ts';
 import { barsFromCloses, linearCloses } from './helpers.ts';
 
-test('candidateSymbols: 코인은 BTC → BTC-USD로 정규화', () => {
-  assert.deepEqual(candidateSymbols('CRYPTO', 'btc'), ['BTC-USD']);
-  assert.deepEqual(candidateSymbols('CRYPTO', 'ETH-USD'), ['ETH-USD']);
+test('candidateSymbols: 코인은 바이낸스 USDT 마켓 5종으로 정규화, 그 외는 없음', () => {
+  assert.deepEqual(candidateSymbols('CRYPTO', 'btc'), ['BTCUSDT']);
+  assert.deepEqual(candidateSymbols('CRYPTO', 'ETH-USD'), ['ETHUSDT']);
+  assert.deepEqual(candidateSymbols('CRYPTO', 'DOGE'), []);
 });
 
 test('simulate: lotSize로 소수점 수량 매수 (1개가 자본보다 비싼 코인)', async () => {
@@ -65,13 +66,16 @@ test('검증: 코인 티커 형식과 시장별 매매 주기', () => {
   assert.equal(ok.success, true, JSON.stringify(ok.error?.issues));
   assert.deepEqual(ok.data!.tickers, ['BTC-USD', 'ETH']);
   assert.equal(createRunSchema.safeParse({ ...base, tickers: ['005930'] }).success, false);
+  assert.equal(createRunSchema.safeParse({ ...base, tickers: ['DOGE'] }).success, false, '지원 5종 외 코인 불가');
+  assert.equal(createRunSchema.safeParse({ ...base, execution: 'tick' }).success, true);
+  assert.equal(createRunSchema.safeParse({ ...base, market: 'US', tickers: ['AAPL'], intervals: [5], execution: 'tick' }).success, false, '틱 체결은 코인 전용');
   assert.equal(createRunSchema.safeParse({ ...base, intervals: [5] }).success, false, '코인에 주식용 5거래일 주기 불가');
   assert.equal(createRunSchema.safeParse({ ...base, market: 'US', tickers: ['AAPL'], intervals: [7] }).success, false, '주식에 7일 주기 불가');
 });
 
 test('MARKETS.CRYPTO: 벤치마크 BTC, 365일, 소수점 수량, 수수료', () => {
   const c = MARKETS.CRYPTO;
-  assert.equal(c.indexSymbol, 'BTC-USD');
+  assert.equal(c.indexSymbol, 'BTCUSDT');
   assert.equal(c.periodsPerYear, 365);
   assert.ok(c.lotSize < 1);
   assert.ok(c.buyFeeRate > 0 && c.sellFeeRate > 0);

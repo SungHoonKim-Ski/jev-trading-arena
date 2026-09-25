@@ -13,6 +13,8 @@ export interface DecideContext {
 /** 종목별 목표 비중(0~1) 또는 null(유지) */
 export type DecideFn = (ctx: DecideContext) => Promise<Readonly<Record<string, number | null>>>;
 
+export type FillPriceFn = (symbol: string, date: string, side: 'buy' | 'sell', quantity: number) => number | null | Promise<number | null>;
+
 export interface SimulationInput {
   readonly symbols: readonly string[];
   readonly bars: Readonly<Record<string, readonly Bar[]>>;
@@ -23,8 +25,11 @@ export interface SimulationInput {
   readonly buyFeeRate: number;
   readonly sellFeeRate: number;
   readonly decide: DecideFn;
-  /** 체결가 결정 함수. null을 반환하면 해당 일 시가로 체결 */
-  readonly fillPrice?: (symbol: string, date: string) => number | null;
+  /**
+   * 체결가 결정 함수 (분봉 VWAP, 틱 체결 등). quantity는 시가 기준 예상 수량.
+   * null을 반환하면 해당 일 시가로 체결
+   */
+  readonly fillPrice?: FillPriceFn;
   /** 최소 매매 단위 (기본 1주, 코인은 0.00000001개) */
   readonly lotSize?: number;
 }
@@ -87,20 +92,36 @@ function currentWeights(input: SimulationInput, p: Portfolio, date: string): Rec
 interface Order { readonly symbol: string; readonly target: number }
 
 /** 시가에 목표 비중으로 리밸런싱. 매도 먼저, 이후 현금 한도 내 매수 */
+/** 체결가 반영 후 수량 변화가 이 비율을 넘으면 다시 호가를 받는다 */
+const REQUOTE_TOLERANCE = 0.05;
+
 /** 수량을 매매 단위로 내림. 부동소수 오차를 없애려고 단위 개수(정수)로 계산 */
 function roundLots(quantity: number, lot: number): number {
   const lots = Math.floor(quantity / lot + 1e-9);
   return lot >= 1 ? lots * lot : Number((lots * lot).toFixed(12));
 }
 
-function execute(input: SimulationInput, p: Portfolio, orders: readonly Order[], date: string): { portfolio: Portfolio; trades: Trade[] } {
+async function execute(input: SimulationInput, p: Portfolio, orders: readonly Order[], date: string): Promise<{ portfolio: Portfolio; trades: Trade[] }> {
   const lot = input.lotSize ?? 1;
   const slot = portfolioValue(input, p, date, 'open') / input.symbols.length;
-  const plans = orders.map((o) => {
-    const price = input.fillPrice?.(o.symbol, date) ?? markPrice(input, o.symbol, date, 'open')!;
+  const plans = await Promise.all(orders.map(async (o) => {
+    const open = markPrice(input, o.symbol, date, 'open')!;
     const held = p.shares[o.symbol] ?? 0;
-    return { ...o, price, held, delta: roundLots((slot * o.target) / price, lot) - held };
-  });
+    // 시가로 예상 수량을 잡고 체결가를 구한 뒤, 그 가격으로 최종 수량을 다시 계산
+    const estimate = roundLots((slot * o.target) / open, lot) - held;
+    if (estimate === 0 || !input.fillPrice) return { ...o, price: open, held, delta: estimate };
+    const side = estimate > 0 ? 'buy' : 'sell';
+    let price = (await input.fillPrice(o.symbol, date, side, Math.abs(estimate))) ?? open;
+    let delta = roundLots((slot * o.target) / price, lot) - held;
+    // 체결가 반영 후 수량이 크게 바뀌면 최종 수량으로 한 번만 다시 호가를 받는다
+    if (Math.sign(delta) === Math.sign(estimate) && Math.abs(delta - estimate) > Math.abs(estimate) * REQUOTE_TOLERANCE) {
+      price = (await input.fillPrice(o.symbol, date, side, Math.abs(delta))) ?? price;
+      delta = roundLots((slot * o.target) / price, lot) - held;
+    }
+    // 체결가 때문에 매매 방향이 뒤집히면(매수 호가로 매도 등) 거래하지 않는다
+    if (Math.sign(delta) !== Math.sign(estimate)) delta = 0;
+    return { ...o, price, held, delta };
+  }));
   const trades: Trade[] = [];
   let cash = p.cash;
   let shares = { ...p.shares };
@@ -165,7 +186,7 @@ export async function simulate(input: SimulationInput): Promise<SimulationResult
     const date = calendar[d]!;
     const ready = Object.entries(pending).filter(([s]) => market.indexOf[s]!.has(date));
     if (ready.length > 0) {
-      const result = execute(input, portfolio, ready.map(([symbol, target]) => ({ symbol, target })), date);
+      const result = await execute(input, portfolio, ready.map(([symbol, target]) => ({ symbol, target })), date);
       portfolio = result.portfolio;
       trades.push(...result.trades);
       pending = Object.fromEntries(Object.entries(pending).filter(([s]) => !market.indexOf[s]!.has(date)));

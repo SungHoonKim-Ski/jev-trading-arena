@@ -6,7 +6,7 @@ const NICK_KEY = 'jev-arena-nickname';
 
 const state = {
   market: 'US',
-  tickers: { KR: ['005930', '000660'], US: ['AAPL', 'NVDA'], CRYPTO: ['BTC-USD', 'ETH-USD'] },
+  tickers: { KR: ['005930', '000660'], US: ['AAPL', 'NVDA'], CRYPTO: ['BTC', 'ETH'] },
 };
 
 const TICKER_PLACEHOLDER = { KR: '종목코드 6자리 (예: 005930)', US: '티커 (예: AAPL)', CRYPTO: '코인 심볼 (예: BTC, SOL-USD)' };
@@ -54,7 +54,7 @@ function template(m) {
       </div>
       <div class="field" style="grid-column: 1 / -1"><b>종목 <span class="hint">최대 5개 · 동일 비중 슬롯으로 운용</span></b>
         <div class="chips" id="preset-chips"></div>
-        <div class="row"><input type="text" id="ticker-input" placeholder="${esc(TICKER_PLACEHOLDER[state.market])}" /><button type="button" class="ghost" id="ticker-add">추가</button></div>
+        ${isCrypto ? '<span class="hint">코인은 바이낸스 USDT 마켓 대표 5종을 제공합니다</span>' : `<div class="row"><input type="text" id="ticker-input" placeholder="${esc(TICKER_PLACEHOLDER[state.market])}" /><button type="button" class="ghost" id="ticker-add">추가</button></div>`}
       </div>
       <div class="field"><b>기간(기한)</b>
         <div class="row"><input type="date" name="startDate" value="${shiftMonths(12)}" max="${today()}" /> ~ <input type="date" name="endDate" value="${yesterday()}" max="${yesterday()}" /></div>
@@ -71,8 +71,11 @@ function template(m) {
         <div class="seg" role="group" aria-label="체결 방식">
           <button type="button" data-execution="open" aria-pressed="true">다음 날 시가</button>
           <button type="button" data-execution="vwap" aria-pressed="false">다음 날 분봉 VWAP</button>
+          ${isCrypto && m.ticksEnabled ? '<button type="button" data-execution="tick" aria-pressed="false">원본 틱 체결</button>' : ''}
         </div>
-        <span class="hint">VWAP은 DB에 수집된 가장 촘촘한 분봉(1분→5분→60분)으로 계산하고, 분봉이 없는 날은 일봉 평균가로 대체합니다.</span>
+        <span class="hint">${isCrypto
+          ? `VWAP은 바이낸스 1분봉으로 계산합니다. 틱 체결은 체결일의 원본 체결을 받아 시장 거래량의 ${Math.round(m.tickParticipation * 100)}%만 내 주문이 가져간다고 보고 체결가를 계산합니다. 틱이 없으면 1분봉, 그다음 일봉 평균가로 대체합니다.`
+          : 'VWAP은 DB에 수집된 가장 촘촘한 분봉(1분→5분→60분)으로 계산하고, 분봉이 없는 날은 일봉 평균가로 대체합니다.'}</span>
       </div>
     </div>
     <h3>전략 · Jev 응답 방식</h3>
@@ -153,16 +156,14 @@ function bind(root, m, onOpenRun) {
   });
   const addTicker = () => {
     const input = root.querySelector('#ticker-input');
-    const raw = input.value.trim().toUpperCase();
-    // 코인은 달러 마켓으로 정규화: BTC → BTC-USD (프리셋과 중복 방지)
-    const t = state.market === 'CRYPTO' && raw && !raw.includes('-') ? `${raw}-USD` : raw;
+    const t = input.value.trim().toUpperCase();
     if (!t) return;
     if (!state.tickers[state.market].includes(t)) toggleTicker(t);
     input.value = '';
     renderChips(root, m);
   };
-  root.querySelector('#ticker-add').addEventListener('click', addTicker);
-  root.querySelector('#ticker-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addTicker(); } });
+  root.querySelector('#ticker-add')?.addEventListener('click', addTicker);
+  root.querySelector('#ticker-input')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addTicker(); } });
   root.querySelectorAll('[data-months]').forEach((b) => b.addEventListener('click', () => {
     form.startDate.value = shiftMonths(Number(b.dataset.months));
     form.endDate.value = yesterday();

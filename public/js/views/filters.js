@@ -7,7 +7,7 @@ export function filterBar(fields, values) {
   const defs = {
     market: ['시장', [['', '전체'], ...Object.entries(m.markets).map(([k, v]) => [k, v.label])]],
     engine: ['엔진', [['', '전체'], ['live', 'Jev'], ['mock', 'Mock']]],
-    execution: ['체결', [['', '전체'], ['open', '시가'], ['vwap', '분봉 VWAP']]],
+    execution: ['체결', [['', '전체'], ['open', '시가'], ['vwap', '분봉 VWAP'], ['tick', '원본 틱']]],
     strategy: ['전략', [['', '전체'], ...Object.entries(m.strategies).map(([k, v]) => [k, v.label])]],
     effort: ['effort', [['', '전체'], ...Object.entries(m.efforts).map(([k, v]) => [k, v.label])]],
     intervalDays: ['주기', [['', '전체'], ...m.intervals.map((i) => [i.days, `${i.label} (${i.days}일)`])]],

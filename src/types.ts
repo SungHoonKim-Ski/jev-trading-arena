@@ -3,8 +3,8 @@ export type Effort = 'low' | 'medium' | 'high';
 /** Jev 응답을 매매 신호로 해석하는 방식 */
 export type Strategy = 'choice' | 'probability' | 'noul' | 'score';
 export type EngineMode = 'live' | 'mock';
-/** 체결 가격 모델: 다음 거래일 시가 / 다음 거래일 분봉 VWAP */
-export type ExecutionModel = 'open' | 'vwap';
+/** 체결 가격 모델: 다음 거래일 시가 / 분봉 VWAP / 원본 틱 체결 흐름(코인 전용) */
+export type ExecutionModel = 'open' | 'vwap' | 'tick';
 export type RunStatus = 'queued' | 'running' | 'done' | 'failed';
 
 export interface Bar {

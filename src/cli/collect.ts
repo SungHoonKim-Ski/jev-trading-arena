@@ -3,7 +3,6 @@
  *   npm run collect                 # 이미 추적 중인 모든 종목
  *   npm run collect -- KR 005930 000660
  *   npm run collect -- US AAPL NVDA
- *   npm run collect -- CRYPTO BTC ETH
  */
 import { CONFIG } from '../config.ts';
 import { openLocalDatabase } from '../db/client.node.ts';
@@ -23,7 +22,7 @@ async function main(): Promise<void> {
   const collector = new IntradayCollector(new IntradayRepository(db));
   let symbols: string[];
   if (marketArg) {
-    if (!['KR', 'US', 'CRYPTO'].includes(marketArg)) throw new Error('첫 인자는 KR, US, CRYPTO 중 하나여야 합니다');
+    if (marketArg !== 'KR' && marketArg !== 'US') throw new Error('첫 인자는 KR 또는 US 여야 합니다 (코인은 npm run ticks 사용)');
     const today = new Date().toISOString().slice(0, 10);
     const from = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
     symbols = [];

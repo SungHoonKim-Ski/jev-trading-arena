@@ -107,3 +107,17 @@ test('simulate: fillPrice가 주어지면 해당 가격으로 체결(VWAP 등), 
   assert.equal(r.trades[0]!.shares, 40);
   assert.equal(r.trades[1]!.price, 30);
 });
+
+test('simulate: fillPrice에 매매 방향과 시가 기준 예상 수량 전달, 비동기 지원', async () => {
+  const bars = barsFromCloses([10, 20, 20, 20]);
+  const calls: [string, number][] = [];
+  let step = 0;
+  const decide: DecideFn = async () => (step++ === 0 ? { A: 1 } : { A: 0 });
+  const r = await simulate({
+    ...base, symbols: ['A'], bars: { A: bars }, startDate: bars[0]!.date, endDate: bars[3]!.date, intervalDays: 1, decide,
+    fillPrice: async (_s, _d, side, qty) => { calls.push([side, qty]); return side === 'buy' ? 25 : 18; },
+  });
+  assert.deepEqual(calls, [['buy', 50], ['buy', 40], ['sell', 40]]); // 수량이 20% 줄어 최종 수량으로 재호가
+  assert.equal(r.trades[0]!.shares, 40); // 1000/25
+  assert.equal(r.trades[1]!.price, 18);
+});

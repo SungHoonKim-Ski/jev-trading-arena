@@ -3,6 +3,7 @@ import { esc, meta, pct, signed, num, money, usd, strategyLabel, effortLabel, in
 import { lineChart } from '../charts.js';
 
 const DECISION_ROWS = 200;
+const EXECUTION_LABEL = { open: '시가 체결', vwap: '분봉 VWAP 체결', tick: '원본 틱 체결' };
 
 function tiles(run, currency) {
   const t = (k, v, s = '') => `<div class="tile"><div class="k">${esc(k)}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
@@ -13,7 +14,8 @@ function tiles(run, currency) {
     ${t('CAGR', signed(run.cagr), `변동성 ${esc(pct(run.volatility))}`)}
     ${t('최대 낙폭(MDD)', signed(run.mdd), `Sharpe ${esc(num(run.sharpe))}`)}
     ${t('거래 횟수', esc(run.trades ?? '–'), `수수료·세금 ${esc(money(run.fees, currency))}`)}
-    ${run.execution === 'vwap' ? t('분봉 VWAP 체결', `${run.intraday_fills ?? 0} / ${(run.intraday_fills ?? 0) + (run.fallback_fills ?? 0)}`, '나머지는 분봉이 없어 일봉 평균가로 체결') : ''}
+    ${run.execution === 'vwap' ? t('분봉 VWAP 체결', `${run.intraday_fills ?? 0} / ${run.trades ?? 0}`, '나머지는 분봉이 없어 일봉 평균가로 체결') : ''}
+    ${run.execution === 'tick' ? t('원본 틱 체결', `${run.tick_fills ?? 0} / ${run.trades ?? 0}`, `1분봉 대체 ${run.intraday_fills ?? 0}건 · 일봉 대체 ${run.fallback_fills ?? 0}건`) : ''}
     ${t('Jev 호출', esc(run.jev_calls ?? '–'), `${esc((run.jev_input_tokens ?? 0).toLocaleString())} 토큰 · ${esc(usd(run.jev_cost_usd))}`)}
   </div>`;
 }
@@ -60,7 +62,7 @@ export async function render(root, runId, { onBack }) {
   const header = `<a href="#" class="back">← 돌아가기</a>
     <h2>${engineBadge(run.engine)} ${esc(run.nickname)}의 ${esc(strategyLabel(run.strategy))} 전략</h2>
     <p class="lead">${esc(marketLabel(run.market))} · ${esc(tickersText(run))} · ${esc(run.start_date)} ~ ${esc(run.end_date)} ·
-      effort ${esc(effortLabel(run.effort))} · ${esc(intervalLabel(run.interval_days))} 판단 · ${run.execution === 'vwap' ? '분봉 VWAP 체결' : '시가 체결'} · 초기 자본 ${esc(money(run.initial_capital, currency))}${run.model ? ` · 모델 ${esc(run.model)}` : ''}</p>`;
+      effort ${esc(effortLabel(run.effort))} · ${esc(intervalLabel(run.interval_days))} 판단 · ${EXECUTION_LABEL[run.execution] ?? '시가 체결'} · 초기 자본 ${esc(money(run.initial_capital, currency))}${run.model ? ` · 모델 ${esc(run.model)}` : ''}</p>`;
 
   if (run.status !== 'done') {
     root.innerHTML = `${header}<div class="card">상태: <b>${esc(STATUS_LABEL[run.status])}</b>${run.error ? `<p class="error">${esc(run.error)}</p>` : ''}

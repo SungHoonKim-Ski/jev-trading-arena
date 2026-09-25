@@ -30,8 +30,11 @@ export class PriceRepository {
     ]);
   }
 
-  async listSymbols(): Promise<string[]> {
-    return (await queryAll<{ symbol: string }>(this.#db, 'SELECT symbol FROM symbols ORDER BY symbol')).map((r) => r.symbol);
+  async listSymbols(market?: Market): Promise<string[]> {
+    const rows = market
+      ? await queryAll<{ symbol: string }>(this.#db, 'SELECT symbol FROM symbols WHERE market = ? ORDER BY symbol', [market])
+      : await queryAll<{ symbol: string }>(this.#db, 'SELECT symbol FROM symbols ORDER BY symbol');
+    return rows.map((r) => r.symbol);
   }
 
   async getSymbol(symbol: string): Promise<SymbolInfo | null> {

@@ -1,6 +1,31 @@
 import path from 'node:path';
 import type { Effort, Market, Strategy } from './types.ts';
 
+export interface TickConfig {
+  readonly enabled: boolean;
+  readonly path: string;
+  readonly maxBytes: number;
+  readonly participation: number;
+  readonly dailyCollect: boolean;
+}
+
+/** 원본 틱 설정. 잘못된 값은 조용히 넘기지 않고 시작 시 실패시킨다 */
+export function readTickConfig(env: Readonly<Record<string, string | undefined>>, rootDir: string): TickConfig {
+  const maxGb = Number(env.TICK_STORE_MAX_GB ?? 10);
+  if (!Number.isFinite(maxGb) || maxGb <= 0) throw new Error(`TICK_STORE_MAX_GB는 0보다 큰 숫자여야 합니다 (현재: ${env.TICK_STORE_MAX_GB})`);
+  const participation = Number(env.TICK_PARTICIPATION ?? 0.1);
+  if (!Number.isFinite(participation) || participation <= 0 || participation > 1) {
+    throw new Error(`TICK_PARTICIPATION은 0보다 크고 1 이하인 숫자여야 합니다 (현재: ${env.TICK_PARTICIPATION})`);
+  }
+  return {
+    enabled: env.TICKS !== 'off',
+    path: env.TICK_STORE_PATH ?? path.join(rootDir, 'data', 'ticks.duckdb'),
+    maxBytes: maxGb * 1e9,
+    participation,
+    dailyCollect: env.TICK_DAILY_COLLECT !== 'off',
+  };
+}
+
 // 번들(Vercel) 환경에서는 import.meta.dirname이 없을 수 있다
 const root = import.meta.dirname ? path.resolve(import.meta.dirname, '..') : process.cwd();
 
@@ -26,6 +51,12 @@ export const CONFIG = {
   /** 분봉 주기 수집 간격 (Yahoo 1분봉은 30일만 보관되므로 최소 하루 1회 이상) */
   intradayCollectEveryMs: Number(process.env.INTRADAY_COLLECT_EVERY_MS ?? 6 * 3600_000),
   intradayCollectEnabled: process.env.INTRADAY_COLLECT !== 'off',
+  ticks: readTickConfig(process.env, root),
+  /** 로컬 서버 수신 주소. 기본은 이 컴퓨터에서만 접속 가능 (외부 공개 시 HOST=0.0.0.0) */
+  host: process.env.HOST ?? '127.0.0.1',
+  /** 프록시(Vercel 등) 뒤에서만 X-Forwarded-For를 믿는다 */
+  trustProxy: process.env.TRUST_PROXY === '1' || Boolean(process.env.VERCEL),
+
   maxRunsPerRequest: 24,
   rateLimit: { windowMs: 60_000, maxCreates: 20 },
 } as const;
@@ -71,8 +102,9 @@ export const MARKETS: Record<Market, MarketConfig> = {
     periodsPerYear: 252, lotSize: 1, intervals: STOCK_INTERVALS, assetNoun: 'stock', dayUnit: 'trading days',
   },
   CRYPTO: {
-    label: '코인', currency: 'USD', indexSymbol: 'BTC-USD', indexName: '비트코인',
-    // 주요 거래소 일반 등급 기준 매수·매도 각 0.1%
+    // 바이낸스 USDT 마켓 기준 (1 USDT ≈ 1 USD로 표시)
+    label: '코인', currency: 'USD', indexSymbol: 'BTCUSDT', indexName: '비트코인',
+    // 바이낸스 일반 등급 기준 매수·매도 각 0.1%
     buyFeeRate: 0.001, sellFeeRate: 0.001, defaultCapital: 10_000,
     periodsPerYear: 365, lotSize: 1e-8, intervals: CRYPTO_INTERVALS, assetNoun: 'cryptocurrency', dayUnit: 'days',
   },
