@@ -42,8 +42,16 @@ test('간단 매매: 전략 1개 선택 → 하루씩 재생 → 결과 카드 �
   await expect(page.locator('#race svg path.series')).toHaveCount(2);
 
   await page.getByRole('link', { name: '랭킹', exact: true }).first().click();
-  await expect(page.locator('#rank-table tbody tr').first()).toContainText('e2e_user');
-  await page.locator('#rank-table tbody tr').first().click();
+  // 1위 시상대 카드, 내 순위 카드
+  await expect(page.locator('.podium-card.place-1')).toContainText('e2e_user');
+  await expect(page.locator('.my-rank')).toContainText('1위');
+  await expect(page.locator('.my-rank')).toContainText('지금 1위예요');
+  await page.getByRole('radio', { name: '보유 대비' }).check();
+  await expect(page.locator('.podium-card.place-1 .big')).toContainText('%p');
+  await page.getByRole('radio', { name: /코인/ }).check();
+  await expect(page.locator('#rank-board')).toContainText('아직 이 조건의 기록이 없어요');
+  await page.getByRole('radio', { name: '전체' }).check();
+  await page.locator('.podium-card.place-1').click();
   await expect(page).toHaveURL(/#play\/\d+/);
 
   await page.getByRole('link', { name: '전략 분석' }).click();
