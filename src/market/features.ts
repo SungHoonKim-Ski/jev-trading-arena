@@ -26,7 +26,6 @@ interface Bucket {
   readonly sentiment: number; // mock 엔진 전용 (-1 ~ 1)
 }
 
-const TRADING_DAYS_PER_YEAR = 252;
 
 function pctChange(bars: readonly Bar[], index: number, lookback: number): number {
   const from = Math.max(0, index - lookback);
@@ -70,7 +69,8 @@ function avgVolume(bars: readonly Bar[], index: number, n: number): number {
   return slice.reduce((s, b) => s + b.volume, 0) / slice.length;
 }
 
-export function computeRawFeatures(bars: readonly Bar[], index: number): RawFeatures {
+/** periodsPerYear: 변동성 연환산 기준 (주식 252, 코인 365) */
+export function computeRawFeatures(bars: readonly Bar[], index: number, periodsPerYear = 252): RawFeatures {
   if (index < 0 || index >= bars.length) {
     throw new RangeError(`index ${index} out of range (0..${bars.length - 1})`);
   }
@@ -84,7 +84,7 @@ export function computeRawFeatures(bars: readonly Bar[], index: number): RawFeat
     gap20: close / sma(bars, index, 20) - 1,
     gap60: close / sma(bars, index, 60) - 1,
     rsi14: rsi(bars, index),
-    vol20: stdev(dailyReturns(bars, index, 20)) * Math.sqrt(TRADING_DAYS_PER_YEAR),
+    vol20: stdev(dailyReturns(bars, index, 20)) * Math.sqrt(periodsPerYear),
     drawdown60: high60 > 0 ? close / high60 - 1 : 0,
     volumeRatio: vol20Avg > 0 ? avgVolume(bars, index, 5) / vol20Avg : 1,
     recentReturns: padStart(dailyReturns(bars, index, 10), 10),

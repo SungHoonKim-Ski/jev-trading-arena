@@ -42,3 +42,21 @@ test('잘못된 입력은 한국어 오류 메시지로 안내', async ({ page }
   await page.getByRole('button', { name: '실행', exact: true }).click();
   await expect(page.locator('#form-error')).toContainText('닉네임');
 });
+
+test('코인 시장: 코인 프리셋·7일 주기로 실행하고 소수점 수량으로 체결', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('닉네임').fill('coin_e2e');
+  await page.getByRole('button', { name: /코인/ }).click();
+  await expect(page.getByRole('button', { name: /비트코인/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByText('7일마다 UTC 0시 종가로 판단')).toBeVisible();
+  await page.locator('#ticker-input').fill('sol');
+  await page.getByRole('button', { name: '추가', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'SOL-USD' })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: /최근 1년/ }).click();
+  await page.getByRole('button', { name: '실행', exact: true }).click();
+  const result = page.locator('#group-result');
+  await expect(result.getByText('실행 결과 (4/4)')).toBeVisible({ timeout: 30_000 });
+  await result.locator('tbody tr').first().click();
+  await expect(page.getByText('코인 ·')).toBeVisible();
+  await expect(page.locator('#equity-chart svg path.series')).toHaveCount(3);
+});

@@ -8,10 +8,10 @@ let metric = 'avg_excess';
 const METRICS = { avg_excess: ['보유 대비 평균 초과수익', pct], avg_return: ['평균 수익률', pct], avg_sharpe: ['평균 Sharpe', (v) => num(v)] };
 
 /** 서버의 (전략, effort, 주기) 그룹을 원하는 두 축으로 재집계 (실행 수 가중 평균) */
-function pivot(rows, colKey, colValues) {
+function pivot(rows, colOf, colValues) {
   const strategies = Object.keys(meta().strategies);
   return strategies.map((s) => colValues.map((c) => {
-    const group = rows.filter((r) => r.strategy === s && String(r[colKey]) === String(c));
+    const group = rows.filter((r) => r.strategy === s && String(colOf(r)) === String(c));
     const n = group.reduce((acc, r) => acc + r.runs, 0);
     if (n === 0) return null;
     const value = group.reduce((acc, r) => acc + r[metric] * r.runs, 0) / n;
@@ -48,7 +48,8 @@ async function load(root) {
     if (rows.length === 0) { out.innerHTML = '<div class="empty">집계할 완료된 실행이 없습니다.</div>'; return; }
     const m = meta();
     const efforts = Object.keys(m.efforts);
-    const intervals = m.intervals.map((i) => i.days);
+    // 주식 5거래일과 코인 7일은 모두 '매주'로 묶어 비교한다
+    const intervals = [...new Set(m.intervals.map((i) => i.label))];
     out.innerHTML = `${headline(rows)}
       <div class="grid-2">
         <div class="card"><h3 style="margin-top:0">전략 × effort</h3><div id="hm-effort"></div></div>
@@ -57,11 +58,11 @@ async function load(root) {
       <div class="card"><h3 style="margin-top:0">조합별 상세</h3>${comboTable(rows)}</div>`;
     const rowLabels = Object.values(m.strategies).map((s) => s.label);
     const fmt = METRICS[metric][1];
-    const effortCells = pivot(rows, 'effort', efforts);
-    const intervalCells = pivot(rows, 'interval_days', intervals);
+    const effortCells = pivot(rows, (r) => r.effort, efforts);
+    const intervalCells = pivot(rows, (r) => intervalLabel(r.interval_days), intervals);
     const maxAbs = Math.max(0.0001, ...[...effortCells, ...intervalCells].flat().filter(Boolean).map((c) => Math.abs(c.value)));
     heatmap(out.querySelector('#hm-effort'), { rows: rowLabels, cols: efforts.map(effortLabel), cells: effortCells, format: fmt, maxAbs });
-    heatmap(out.querySelector('#hm-interval'), { rows: rowLabels, cols: intervals.map(intervalLabel), cells: intervalCells, format: fmt, maxAbs });
+    heatmap(out.querySelector('#hm-interval'), { rows: rowLabels, cols: intervals, cells: intervalCells, format: fmt, maxAbs });
   } catch (ex) {
     out.innerHTML = `<p class="error">${esc(ex.message)}</p>`;
   }

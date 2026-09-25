@@ -30,33 +30,61 @@ export const CONFIG = {
   rateLimit: { windowMs: 60_000, maxCreates: 20 },
 } as const;
 
-export const MARKETS: Record<Market, {
+export interface IntervalOption { readonly days: number; readonly label: string }
+
+export interface MarketConfig {
   readonly label: string;
   readonly currency: string;
+  /** 벤치마크 지수(코인은 비트코인) */
   readonly indexSymbol: string;
   readonly indexName: string;
   readonly buyFeeRate: number;
   readonly sellFeeRate: number; // 수수료 + 거래세
   readonly defaultCapital: number;
-}> = {
+  /** 연환산 기준 거래일 수 (주식 252, 24시간 거래 코인 365) */
+  readonly periodsPerYear: number;
+  /** 최소 매매 단위 (주식 1주, 코인 0.00000001개) */
+  readonly lotSize: number;
+  /** 매매 주기 선택지 (거래일 단위) */
+  readonly intervals: readonly IntervalOption[];
+  /** Jev 질문에 쓰는 자산 명칭과 기간 단위 */
+  readonly assetNoun: 'stock' | 'cryptocurrency';
+  readonly dayUnit: 'trading days' | 'days';
+}
+
+const STOCK_INTERVALS: readonly IntervalOption[] = [
+  { days: 1, label: '매일' }, { days: 5, label: '매주' }, { days: 10, label: '격주' }, { days: 21, label: '매월' },
+];
+const CRYPTO_INTERVALS: readonly IntervalOption[] = [
+  { days: 1, label: '매일' }, { days: 7, label: '매주' }, { days: 14, label: '격주' }, { days: 30, label: '매월' },
+];
+
+export const MARKETS: Record<Market, MarketConfig> = {
   KR: {
     label: '한국', currency: 'KRW', indexSymbol: '^KS11', indexName: 'KOSPI',
     buyFeeRate: 0.00015, sellFeeRate: 0.00015 + 0.002, defaultCapital: 10_000_000,
+    periodsPerYear: 252, lotSize: 1, intervals: STOCK_INTERVALS, assetNoun: 'stock', dayUnit: 'trading days',
   },
   US: {
     label: '미국', currency: 'USD', indexSymbol: '^GSPC', indexName: 'S&P 500',
     buyFeeRate: 0.0, sellFeeRate: 0.0, defaultCapital: 10_000,
+    periodsPerYear: 252, lotSize: 1, intervals: STOCK_INTERVALS, assetNoun: 'stock', dayUnit: 'trading days',
+  },
+  CRYPTO: {
+    label: '코인', currency: 'USD', indexSymbol: 'BTC-USD', indexName: '비트코인',
+    // 주요 거래소 일반 등급 기준 매수·매도 각 0.1%
+    buyFeeRate: 0.001, sellFeeRate: 0.001, defaultCapital: 10_000,
+    periodsPerYear: 365, lotSize: 1e-8, intervals: CRYPTO_INTERVALS, assetNoun: 'cryptocurrency', dayUnit: 'days',
   },
 };
 
+/** 모든 시장의 매매 주기 (라벨 조회·필터용, 중복 제거) */
+export const ALL_INTERVALS: readonly IntervalOption[] = [...new Map(
+  [...STOCK_INTERVALS, ...CRYPTO_INTERVALS].map((i) => [i.days, i]),
+).values()].sort((a, b) => a.days - b.days);
+
 export const EFFORTS: readonly Effort[] = ['low', 'medium', 'high'];
 export const STRATEGIES: readonly Strategy[] = ['choice', 'probability', 'noul', 'score'];
-export const INTERVALS: readonly { readonly days: number; readonly label: string }[] = [
-  { days: 1, label: '매일' },
-  { days: 5, label: '매주' },
-  { days: 10, label: '격주' },
-  { days: 21, label: '매월' },
-];
 
 export const STRATEGY_INFO: Record<Strategy, { readonly label: string; readonly description: string }> = {
   choice: { label: 'Choice 결정', description: '매수/보유/매도 중 가장 확률이 높은 선택지를 그대로 실행' },

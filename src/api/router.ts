@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { CONFIG, EFFORT_INFO, INTERVALS, MARKETS, STRATEGY_INFO } from '../config.ts';
+import { ALL_INTERVALS, CONFIG, EFFORT_INFO, MARKETS, STRATEGY_INFO } from '../config.ts';
 import type { RunRepository } from '../db/runRepository.ts';
 import type { RunQueue } from '../backtest/queue.ts';
 import type { Effort, RunParams, Strategy } from '../types.ts';
@@ -43,7 +43,7 @@ function meta(jevLive: boolean) {
     presets: TICKER_PRESETS,
     strategies: STRATEGY_INFO,
     efforts: EFFORT_INFO,
-    intervals: INTERVALS,
+    intervals: ALL_INTERVALS,
     maxRunsPerRequest: CONFIG.maxRunsPerRequest,
     intradaySpecs: INTRADAY_SPECS,
   };

@@ -1,6 +1,5 @@
 import type { EquityPoint, Metrics, Trade } from '../types.ts';
 
-const TRADING_DAYS_PER_YEAR = 252;
 const MS_PER_YEAR = 365.25 * 24 * 3600 * 1000;
 
 export function maxDrawdown(values: readonly number[]): number {
@@ -17,7 +16,8 @@ export function totalReturnOf(values: readonly number[], initial: number): numbe
   return values.length === 0 || initial <= 0 ? 0 : values[values.length - 1]! / initial - 1;
 }
 
-export function computeMetrics(points: readonly EquityPoint[], trades: readonly Trade[], initialCapital: number): Metrics {
+/** periodsPerYear: 연환산 기준 (주식 252, 코인 365) */
+export function computeMetrics(points: readonly EquityPoint[], trades: readonly Trade[], initialCapital: number, periodsPerYear = 252): Metrics {
   const values = points.map((p) => p.equity);
   const finalEquity = values.at(-1) ?? initialCapital;
   const totalReturn = totalReturnOf(values, initialCapital);
@@ -31,8 +31,8 @@ export function computeMetrics(points: readonly EquityPoint[], trades: readonly 
     totalReturn,
     cagr: years > 0 && finalEquity > 0 ? (finalEquity / initialCapital) ** (1 / years) - 1 : 0,
     mdd: maxDrawdown(values),
-    sharpe: sd > 0 ? (mean / sd) * Math.sqrt(TRADING_DAYS_PER_YEAR) : 0,
-    volatility: sd * Math.sqrt(TRADING_DAYS_PER_YEAR),
+    sharpe: sd > 0 ? (mean / sd) * Math.sqrt(periodsPerYear) : 0,
+    volatility: sd * Math.sqrt(periodsPerYear),
     trades: trades.length,
     fees: trades.reduce((s, t) => s + t.fee, 0),
     finalEquity,

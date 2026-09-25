@@ -1,4 +1,4 @@
-export type Market = 'KR' | 'US';
+export type Market = 'KR' | 'US' | 'CRYPTO';
 export type Effort = 'low' | 'medium' | 'high';
 /** Jev 응답을 매매 신호로 해석하는 방식 */
 export type Strategy = 'choice' | 'probability' | 'noul' | 'score';

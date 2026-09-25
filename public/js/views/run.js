@@ -6,8 +6,10 @@ const NICK_KEY = 'jev-arena-nickname';
 
 const state = {
   market: 'US',
-  tickers: { KR: ['005930', '000660'], US: ['AAPL', 'NVDA'] },
+  tickers: { KR: ['005930', '000660'], US: ['AAPL', 'NVDA'], CRYPTO: ['BTC-USD', 'ETH-USD'] },
 };
+
+const TICKER_PLACEHOLDER = { KR: '종목코드 6자리 (예: 005930)', US: '티커 (예: AAPL)', CRYPTO: '코인 심볼 (예: BTC, SOL-USD)' };
 
 const today = () => new Date().toISOString().slice(0, 10);
 const shiftMonths = (months) => {
@@ -33,6 +35,11 @@ function checks(name, entries, checkedKeys) {
 
 function template(m) {
   const cap = m.markets[state.market].defaultCapital;
+  const marketIntervals = m.markets[state.market].intervals;
+  const isCrypto = state.market === 'CRYPTO';
+  const intervalHint = (days) => (isCrypto
+    ? `${days}일마다 UTC 0시 종가로 판단 → 다음 날 체결`
+    : `${days}거래일마다 종가로 판단 → 다음 거래일 체결`);
   return `
   <h2>백테스트 실행</h2>
   <p class="lead">기간·종목을 정하고, Jev 응답 방식(전략)·effort·매매 주기 조합을 골라 동시에 돌려 보세요. 결과는 랭킹에 기록됩니다.</p>
@@ -47,7 +54,7 @@ function template(m) {
       </div>
       <div class="field" style="grid-column: 1 / -1"><b>종목 <span class="hint">최대 5개 · 동일 비중 슬롯으로 운용</span></b>
         <div class="chips" id="preset-chips"></div>
-        <div class="row"><input type="text" id="ticker-input" placeholder="${state.market === 'KR' ? '종목코드 6자리 (예: 005930)' : '티커 (예: AAPL)'}" /><button type="button" class="ghost" id="ticker-add">추가</button></div>
+        <div class="row"><input type="text" id="ticker-input" placeholder="${esc(TICKER_PLACEHOLDER[state.market])}" /><button type="button" class="ghost" id="ticker-add">추가</button></div>
       </div>
       <div class="field"><b>기간(기한)</b>
         <div class="row"><input type="date" name="startDate" value="${shiftMonths(12)}" max="${today()}" /> ~ <input type="date" name="endDate" value="${yesterday()}" max="${yesterday()}" /></div>
@@ -73,7 +80,7 @@ function template(m) {
     <h3>Jev effort</h3>
     <div class="checks">${checks('efforts', Object.entries(m.efforts).map(([k, v]) => [k, v.label, v.description]), ['low', 'high'])}</div>
     <h3>매매(구매) 주기</h3>
-    <div class="checks">${checks('intervals', m.intervals.map((i) => [String(i.days), i.label, `${i.days}거래일마다 종가로 판단 → 다음 거래일 체결`]), ['5'])}</div>
+    <div class="checks">${checks('intervals', marketIntervals.map((i) => [String(i.days), i.label, intervalHint(i.days)]), [String(marketIntervals[1].days)])}</div>
     <div class="submit-bar">
       <button class="primary" type="submit">실행</button>
       <span id="combo-count" class="hint"></span>
@@ -146,7 +153,9 @@ function bind(root, m, onOpenRun) {
   });
   const addTicker = () => {
     const input = root.querySelector('#ticker-input');
-    const t = input.value.trim().toUpperCase();
+    const raw = input.value.trim().toUpperCase();
+    // 코인은 달러 마켓으로 정규화: BTC → BTC-USD (프리셋과 중복 방지)
+    const t = state.market === 'CRYPTO' && raw && !raw.includes('-') ? `${raw}-USD` : raw;
     if (!t) return;
     if (!state.tickers[state.market].includes(t)) toggleTicker(t);
     input.value = '';

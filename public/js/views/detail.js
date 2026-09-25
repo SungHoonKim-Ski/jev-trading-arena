@@ -20,7 +20,7 @@ function tiles(run, currency) {
 
 function decisionsTable(decisions, names) {
   const rows = decisions.slice(-DECISION_ROWS).reverse();
-  return `<div class="table-wrap"><table><thead><tr><th>결정일</th><th>종목</th><th>판단</th><th class="num">목표 비중</th><th class="num">강세 신호</th><th class="num">신뢰도</th></tr></thead>
+  return `<div class="table-wrap scroll"><table><thead><tr><th>결정일</th><th>종목</th><th>판단</th><th class="num">목표 비중</th><th class="num">강세 신호</th><th class="num">신뢰도</th></tr></thead>
     <tbody>${rows.map((d) => `<tr><td>${esc(d.date)}</td><td>${esc(names[d.symbol] ?? d.symbol)}</td>
       <td class="${d.action === 'buy' ? 'pos' : d.action === 'sell' ? 'neg' : ''}">${esc(ACTION_LABEL[d.action])}</td>
       <td class="num">${d.targetWeight == null ? '유지' : `${Math.round(d.targetWeight * 100)}%`}</td>
@@ -30,9 +30,10 @@ function decisionsTable(decisions, names) {
 
 function tradesTable(trades, names, currency) {
   if (trades.length === 0) return '<div class="empty">체결 내역이 없습니다.</div>';
-  return `<div class="table-wrap"><table><thead><tr><th>체결일</th><th>종목</th><th>구분</th><th class="num">수량</th><th class="num">가격</th><th class="num">수수료·세금</th></tr></thead>
-    <tbody>${trades.map((t) => `<tr><td>${esc(t.date)}</td><td>${esc(names[t.symbol] ?? t.symbol)}</td>
-      <td class="${t.side === 'buy' ? 'pos' : 'neg'}">${t.side === 'buy' ? '매수' : '매도'}</td><td class="num">${esc(t.shares)}</td>
+  const rows = [...trades].reverse();
+  return `<div class="table-wrap scroll"><table><thead><tr><th>체결일</th><th>종목</th><th>구분</th><th class="num">수량</th><th class="num">가격</th><th class="num">수수료·세금</th></tr></thead>
+    <tbody>${rows.map((t) => `<tr><td>${esc(t.date)}</td><td>${esc(names[t.symbol] ?? t.symbol)}</td>
+      <td class="${t.side === 'buy' ? 'pos' : 'neg'}">${t.side === 'buy' ? '매수' : '매도'}</td><td class="num">${esc(Number(t.shares).toLocaleString('ko-KR', { maximumFractionDigits: 8 }))}</td>
       <td class="num">${esc(money(t.price, currency))}</td><td class="num">${esc(money(t.fee, currency))}</td></tr>`).join('')}</tbody></table></div>`;
 }
 

@@ -48,6 +48,7 @@ interface JevUsage { calls: number; tokens: number; model: string }
 
 /** 결정일마다 익명화된 state로 Jev를 호출하고 답변을 목표 비중으로 변환하는 decide 함수 */
 function makeDecider(params: RunParams, symbols: readonly SymbolBars[], jev: JevClient, deps: RunnerDeps, runId: number) {
+  const market = MARKETS[params.market];
   const keyOf = new Map(symbols.map((s, i) => [s.symbol, `asset_${i + 1}`]));
   const decisions: (AssetDecision & { date: string })[] = [];
   const usage: JevUsage = { calls: 0, tokens: 0, model: deps.model };
@@ -56,9 +57,12 @@ function makeDecider(params: RunParams, symbols: readonly SymbolBars[], jev: Jev
     const eligible = symbols.filter((s) => (ctx.barIndex[s.symbol] ?? -1) >= MIN_WARMUP_BARS - 1);
     if (eligible.length === 0) return {};
     const assets: Record<string, AssetState> = Object.fromEntries(eligible.map((s) => [
-      keyOf.get(s.symbol)!, buildAssetState(computeRawFeatures(s.bars, ctx.barIndex[s.symbol]!), params.effort),
+      keyOf.get(s.symbol)!, buildAssetState(computeRawFeatures(s.bars, ctx.barIndex[s.symbol]!, market.periodsPerYear), params.effort),
     ]));
-    const request = buildJevRequest({ assets, strategy: params.strategy, effort: params.effort, intervalDays: params.intervalDays, model: deps.model });
+    const request = buildJevRequest({
+      assets, strategy: params.strategy, effort: params.effort, intervalDays: params.intervalDays, model: deps.model,
+      assetNoun: market.assetNoun, dayUnit: market.dayUnit,
+    });
     const res = await jev.evaluate(request);
     if (!res.cached) usage.calls += 1;
     usage.tokens += res.usage.input_tokens;
@@ -147,12 +151,13 @@ export async function executeRun(runId: number, deps: RunnerDeps): Promise<void>
     symbols: symbols.map((s) => s.symbol), bars: Object.fromEntries(symbols.map((s) => [s.symbol, s.bars])),
     startDate: params.startDate, endDate: params.endDate, intervalDays: params.intervalDays,
     initialCapital: params.initialCapital, buyFeeRate: market.buyFeeRate, sellFeeRate: market.sellFeeRate, decide,
+    lotSize: market.lotSize,
     fillPrice: params.execution === 'vwap' ? makeVwapFill(symbols, intradayDays) : undefined,
   });
 
   const fills = params.execution === 'vwap' ? countFills(sim.trades, intradayDays) : null;
   const idx = indexSeries(indexBars, sim.equity.map((p) => p.date), params.initialCapital);
-  const metrics = computeMetrics(sim.equity, sim.trades, params.initialCapital);
+  const metrics = computeMetrics(sim.equity, sim.trades, params.initialCapital, market.periodsPerYear);
   const lastIdx = idx.findLast((v) => v !== null) ?? null;
   await deps.runs.complete(runId, {
     equity: sim.equity.map((p, i) => ({ ...p, index: idx[i] })),
