@@ -13,6 +13,7 @@ const state = {
   ticker: { KR: '005930', US: 'AAPL', CRYPTO: 'BTC' },
   months: 12,
   strategy: 'noul',
+  threshold: null, // null이면 서버 기본값
 };
 
 const KIND_LABEL = { stock: '개별 종목', etf: 'ETF', coin: '코인' };
@@ -61,6 +62,8 @@ function advancedTemplate(m, market) {
         <button type="button" data-execution="vwap" aria-pressed="false">분봉 VWAP</button>
         ${isCrypto && m.ticksEnabled ? '<button type="button" data-execution="tick" aria-pressed="false">원본 틱</button>' : ''}</div></div>
     </div>
+    <h3>매도 규칙</h3>
+    <div class="checks">${radios('exitRule', Object.entries(m.exitRules).map(([k, v]) => [k, v.label, v.description]), 'opposite')}</div>
     <h3>effort <span class="hint">Jev에게 얼마나 공들여 물을지</span></h3>
     <div class="checks">${radios('effort', Object.entries(m.efforts).map(([k, v]) => [k, v.label, v.description]), EFFORT_DEFAULT)}</div>
     <h3>매매 주기</h3>
@@ -92,6 +95,8 @@ function template(m) {
     <fieldset class="step"><legend class="step-label">4. Jev에게 어떻게 물을까? <span class="hint">하나를 고르세요</span></legend>
       <div class="strategy-cards">${Object.entries(m.strategies).map(([k, v]) => `<label class="strategy-card choice"><input type="radio" name="strategy" value="${k}" ${k === state.strategy ? 'checked' : ''} />
         <span class="dot" aria-hidden="true"></span><b>${esc(STRATEGY_FRIENDLY[k])}</b><span class="desc">${esc(v.description)}</span></label>`).join('')}</div></fieldset>
+    <fieldset class="step"><legend class="step-label">5. 얼마나 확실할 때 움직일까? <span class="hint">Jev가 이 확률 이상일 때만 사고팝니다. 높을수록 거래가 드물어요</span></legend>
+      <div class="chips">${m.thresholds.map((t) => `<label class="chip big choice"><input type="radio" name="threshold" value="${t}" ${t === (state.threshold ?? m.defaultThreshold) ? 'checked' : ''} /><span class="dot" aria-hidden="true"></span>${Math.round(t * 100)}%</label>`).join('')}</div></fieldset>
     <div class="start-bar">
       <label class="nick">닉네임 <input type="text" name="nickname" maxlength="20" required value="${esc(readNick())}" placeholder="랭킹에 표시될 이름" /></label>
       <button class="primary start" type="submit">▶ 매매 시작</button>
@@ -127,6 +132,8 @@ function formValues(form) {
     strategies: compare ? all('strategies') : [String(fd.get('strategy') ?? state.strategy)],
     efforts: compare ? all('efforts') : [String(fd.get('effort') ?? EFFORT_DEFAULT)],
     intervals: (compare ? all('intervals') : [String(fd.get('interval'))]).map(Number),
+    threshold: Number(fd.get('threshold')),
+    exitRule: String(fd.get('exitRule') ?? 'opposite'),
     compare,
   };
 }
@@ -147,6 +154,7 @@ function bindChoices(root, m, form, onOpenRun) {
   // 시장·기간·전략은 하나만 고르는 라디오 버튼
   form.querySelectorAll('input[name="market"]').forEach((r) => r.addEventListener('change', () => { state.market = r.value; render(root, onOpenRun); }));
   form.querySelectorAll('input[name="strategy"]').forEach((r) => r.addEventListener('change', () => { state.strategy = r.value; }));
+  form.querySelectorAll('input[name="threshold"]').forEach((r) => r.addEventListener('change', () => { state.threshold = Number(r.value); }));
   form.querySelectorAll('input[name="months"]').forEach((r) => r.addEventListener('change', () => {
     state.months = Number(r.value);
     form.startDate.value = monthsAgo(state.months);

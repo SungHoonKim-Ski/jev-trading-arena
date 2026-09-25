@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { EFFORTS, MARKETS, STRATEGIES } from '../config.ts';
+import { DEFAULT_THRESHOLD, EFFORTS, MARKETS, STRATEGIES, THRESHOLDS } from '../config.ts';
 import { CRYPTO_ASSETS } from '../market/binance.ts';
 import { SORT_COLUMNS } from '../db/runRepository.ts';
 
@@ -31,6 +31,8 @@ export const createRunSchema = z.object({
   initialCapital: z.number().finite().min(100, '초기 자본이 너무 작습니다').max(1e12),
   engine: z.enum(['live', 'mock']),
   execution: z.enum(['open', 'vwap', 'tick']).default('open'),
+  threshold: z.number().refine((t) => THRESHOLDS.includes(t), `임계값은 ${THRESHOLDS.map((t) => `${t * 100}%`).join(', ')} 중 하나여야 합니다`).default(DEFAULT_THRESHOLD),
+  exitRule: z.enum(['opposite', 'drop']).default('opposite'),
   strategies: z.array(z.enum(STRATEGIES as [string, ...string[]])).min(1, '전략을 1개 이상 선택하세요'),
   efforts: z.array(z.enum(EFFORTS as [string, ...string[]])).min(1, 'effort를 1개 이상 선택하세요'),
   intervals: z.array(z.number().int()).min(1, '매매 주기를 1개 이상 선택하세요'),
@@ -68,6 +70,7 @@ export const rankQuerySchema = z.object({
   endDate: DATE.optional().or(z.literal('').transform(() => undefined)),
   nickname: optionalStr,
   execution: z.enum(['open', 'vwap', 'tick']).optional().or(z.literal('').transform(() => undefined)),
+  threshold: z.preprocess((v) => (v === '' || v == null ? undefined : Number(v)), z.number().optional()),
   sort: z.enum(SORT_COLUMNS).default('total_return'),
   limit: z.preprocess((v) => (v == null || v === '' ? 50 : Number(v)), z.number().int().min(1).max(200)),
   bestPerUser: z.preprocess((v) => v === 'true' || v === '1', z.boolean()),

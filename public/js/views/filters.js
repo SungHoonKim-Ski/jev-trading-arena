@@ -11,6 +11,7 @@ export function filterBar(fields, values) {
     strategy: ['전략', [['', '전체'], ...Object.entries(m.strategies).map(([k, v]) => [k, v.label])]],
     effort: ['effort', [['', '전체'], ...Object.entries(m.efforts).map(([k, v]) => [k, v.label])]],
     intervalDays: ['주기', [['', '전체'], ...m.intervals.map((i) => [i.days, `${i.label} (${i.days}일)`])]],
+    threshold: ['기준', [['', '전체'], ...(m.thresholds ?? []).map((t) => [t, `${Math.round(t * 100)}%`])]],
     sort: ['정렬', [['total_return', '수익률'], ['excess_return', '보유 대비 초과수익'], ['sharpe', 'Sharpe'], ['cagr', 'CAGR'], ['mdd', 'MDD(낮은 낙폭)']]],
   };
   const selects = fields.filter((f) => defs[f]).map((f) => {

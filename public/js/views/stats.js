@@ -1,5 +1,5 @@
 import { api, qs } from '../api.js';
-import { esc, meta, pct, signed, num, usd, strategyLabel, effortLabel, intervalLabel } from '../format.js';
+import { esc, meta, pct, signed, num, usd, strategyFriendly as strategyLabel, effortLabel, intervalLabel, thresholdLabel } from '../format.js';
 import { heatmap } from '../charts.js';
 import { filterBar, readFilters } from './filters.js';
 
@@ -31,10 +31,10 @@ function headline(rows) {
 }
 
 function comboTable(rows) {
-  return `<div class="table-wrap"><table><thead><tr><th>전략</th><th>effort</th><th>주기</th><th class="num">실행</th><th class="num">사용자</th>
+  return `<div class="table-wrap"><table><thead><tr><th>전략</th><th>기준</th><th>effort</th><th>주기</th><th class="num">실행</th><th class="num">사용자</th>
     <th class="num">평균 수익률</th><th class="num">최고 수익률</th><th class="num">평균 초과수익</th><th class="num">보유 대비 승률</th>
     <th class="num">평균 Sharpe</th><th class="num">평균 MDD</th><th class="num">평균 거래</th><th class="num">평균 Jev 비용</th></tr></thead>
-    <tbody>${rows.map((r) => `<tr><td>${esc(strategyLabel(r.strategy))}</td><td>${esc(effortLabel(r.effort))}</td><td>${esc(intervalLabel(r.interval_days))}</td>
+    <tbody>${rows.map((r) => `<tr><td>${esc(strategyLabel(r.strategy))}</td><td>${esc(thresholdLabel(r.threshold))}</td><td>${esc(effortLabel(r.effort))}</td><td>${esc(intervalLabel(r.interval_days))}</td>
       <td class="num">${r.runs}</td><td class="num">${r.users}</td><td class="num">${signed(r.avg_return)}</td><td class="num">${signed(r.best_return)}</td>
       <td class="num">${signed(r.avg_excess)}</td><td class="num">${Math.round(r.beat_benchmark_rate * 100)}%</td><td class="num">${num(r.avg_sharpe)}</td>
       <td class="num">${signed(r.avg_mdd)}</td><td class="num">${num(r.avg_trades, 1)}</td><td class="num">${usd(r.avg_cost_usd)}</td></tr>`).join('')}</tbody></table></div>`;
@@ -55,14 +55,18 @@ async function load(root) {
         <div class="card"><h3 style="margin-top:0">전략 × effort</h3><div id="hm-effort"></div></div>
         <div class="card"><h3 style="margin-top:0">전략 × 매매 주기</h3><div id="hm-interval"></div></div>
       </div>
+      <div class="card"><h3 style="margin-top:0">전략 × 확신 기준 <span class="hint">높은 기준일수록 거래가 드뭅니다</span></h3><div id="hm-threshold"></div></div>
       <div class="card"><h3 style="margin-top:0">조합별 상세</h3>${comboTable(rows)}</div>`;
-    const rowLabels = Object.values(m.strategies).map((s) => s.label);
+    const rowLabels = Object.keys(m.strategies).map((k) => strategyLabel(k));
     const fmt = METRICS[metric][1];
     const effortCells = pivot(rows, (r) => r.effort, efforts);
     const intervalCells = pivot(rows, (r) => intervalLabel(r.interval_days), intervals);
-    const maxAbs = Math.max(0.0001, ...[...effortCells, ...intervalCells].flat().filter(Boolean).map((c) => Math.abs(c.value)));
+    const thresholdCols = [...m.thresholds.map(thresholdLabel), ...(rows.some((r) => r.threshold == null) ? [thresholdLabel(null)] : [])];
+    const thresholdCells = pivot(rows, (r) => thresholdLabel(r.threshold), thresholdCols);
+    const maxAbs = Math.max(0.0001, ...[...effortCells, ...intervalCells, ...thresholdCells].flat().filter(Boolean).map((c) => Math.abs(c.value)));
     heatmap(out.querySelector('#hm-effort'), { rows: rowLabels, cols: efforts.map(effortLabel), cells: effortCells, format: fmt, maxAbs });
     heatmap(out.querySelector('#hm-interval'), { rows: rowLabels, cols: intervals, cells: intervalCells, format: fmt, maxAbs });
+    heatmap(out.querySelector('#hm-threshold'), { rows: rowLabels, cols: thresholdCols, cells: thresholdCells, format: fmt, maxAbs });
   } catch (ex) {
     out.innerHTML = `<p class="error">${esc(ex.message)}</p>`;
   }
@@ -71,7 +75,7 @@ async function load(root) {
 export function render(root) {
   root.innerHTML = `<h2>전략 분석</h2>
     <p class="lead">어떤 Jev 응답 방식·effort·매매 주기 조합이 수익을 잘 내는지 전체 실행 기록을 모아 비교합니다. 파란색은 매수 후 보유보다 나은 성과, 빨간색은 못한 성과입니다.</p>
-    <div class="card">${filterBar(['market', 'engine', 'execution', 'effort', 'intervalDays', 'period'], filters)}
+    <div class="card">${filterBar(['market', 'engine', 'execution', 'threshold', 'effort', 'intervalDays', 'period'], filters)}
       <div class="filters"><label>지표 <select id="metric">${Object.entries(METRICS).map(([k, [l]]) => `<option value="${k}" ${k === metric ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label></div>
     </div>
     <div id="stats-body"></div>`;

@@ -5,6 +5,8 @@ export type Strategy = 'choice' | 'probability' | 'noul' | 'score';
 export type EngineMode = 'live' | 'mock';
 /** 체결 가격 모델: 다음 거래일 시가 / 분봉 VWAP / 원본 틱 체결 흐름(코인 전용) */
 export type ExecutionModel = 'open' | 'vwap' | 'tick';
+/** 매도 규칙: 반대 확신 매도 / 확신이 임계값 아래로 내려가면 즉시 매도 */
+export type ExitRule = 'opposite' | 'drop';
 export type RunStatus = 'queued' | 'running' | 'done' | 'failed';
 
 export interface Bar {
@@ -28,6 +30,9 @@ export interface RunParams {
   readonly initialCapital: number;
   readonly engine: EngineMode;
   readonly execution: ExecutionModel;
+  /** 행동에 필요한 최소 확률 (0.7 ~ 0.95) */
+  readonly threshold: number;
+  readonly exitRule: ExitRule;
 }
 
 /** 한 종목에 대한 결정. targetWeight=null 이면 현재 비중 유지 */

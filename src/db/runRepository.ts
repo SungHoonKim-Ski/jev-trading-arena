@@ -1,5 +1,6 @@
 import type { AssetDecision, EquityPoint, Metrics, RunParams, RunStatus, Trade } from '../types.ts';
 import { queryAll, queryOne, writeBatch, type Db, type SqlArg } from './database.ts';
+import { DEFAULT_THRESHOLD } from '../config.ts';
 
 export interface RunSummary {
   readonly totalReturn: number;
@@ -32,6 +33,7 @@ export interface RankFilters {
   readonly endDate?: string;
   readonly nickname?: string;
   readonly execution?: string;
+  readonly threshold?: number;
 }
 
 export const SORT_COLUMNS = ['total_return', 'excess_return', 'sharpe', 'cagr', 'mdd'] as const;
@@ -42,7 +44,7 @@ type Row = Record<string, unknown>;
 const RUN_COLUMNS = `id, group_id, nickname, market, tickers, symbol_names, start_date, end_date, interval_days, effort,
   strategy, engine, model, initial_capital, status, progress, error, created_at, finished_at, total_return, cagr, mdd,
   sharpe, volatility, trades, fees, final_equity, benchmark_return, index_return, excess_return, jev_calls,
-  jev_input_tokens, jev_cost_usd, execution, intraday_fills, fallback_fills, tick_fills, started_at`;
+  jev_input_tokens, jev_cost_usd, execution, intraday_fills, fallback_fills, tick_fills, started_at, threshold, exit_rule`;
 
 function toRun(row: Row): Row {
   return {
@@ -59,7 +61,7 @@ function whereClause(f: RankFilters): { sql: string; params: SqlArg[] } {
     if (v !== undefined && v !== '') { parts.push(`${col} = ?`); params.push(v); }
   };
   eq('market', f.market); eq('engine', f.engine); eq('effort', f.effort); eq('strategy', f.strategy);
-  eq('interval_days', f.intervalDays); eq('start_date', f.startDate); eq('end_date', f.endDate); eq('nickname', f.nickname); eq('execution', f.execution);
+  eq('interval_days', f.intervalDays); eq('start_date', f.startDate); eq('end_date', f.endDate); eq('nickname', f.nickname); eq('execution', f.execution); eq('threshold', f.threshold);
   return { sql: parts.join(' AND '), params };
 }
 
@@ -70,9 +72,9 @@ export class RunRepository {
   async create(params: RunParams, groupId: string): Promise<number> {
     const r = await this.#db.execute({
       sql: `INSERT INTO runs (group_id, nickname, market, tickers, start_date, end_date, interval_days, effort, strategy, engine,
-        execution, initial_capital, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?)`,
+        execution, threshold, exit_rule, initial_capital, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?)`,
       args: [groupId, params.nickname, params.market, JSON.stringify(params.tickers), params.startDate, params.endDate,
-        params.intervalDays, params.effort, params.strategy, params.engine, params.execution, params.initialCapital, new Date().toISOString()],
+        params.intervalDays, params.effort, params.strategy, params.engine, params.execution, params.threshold, params.exitRule, params.initialCapital, new Date().toISOString()],
     });
     return Number(r.lastInsertRowid);
   }
@@ -86,6 +88,8 @@ export class RunRepository {
       effort: row.effort as RunParams['effort'], strategy: row.strategy as RunParams['strategy'],
       initialCapital: Number(row.initial_capital), engine: row.engine as RunParams['engine'],
       execution: (row.execution ?? 'open') as RunParams['execution'],
+      threshold: row.threshold == null ? DEFAULT_THRESHOLD : Number(row.threshold),
+      exitRule: (row.exit_rule ?? 'opposite') as RunParams['exitRule'],
     };
   }
 
@@ -184,12 +188,12 @@ export class RunRepository {
   /** 전략(Jev 응답 방식) × effort × 매매 주기 조합별 평균 성과 */
   async strategyStats(f: RankFilters): Promise<Row[]> {
     const { sql, params } = whereClause(f);
-    return queryAll<Row>(this.#db, `SELECT strategy, effort, interval_days, COUNT(*) AS runs, COUNT(DISTINCT nickname) AS users,
+    return queryAll<Row>(this.#db, `SELECT strategy, effort, interval_days, threshold, COUNT(*) AS runs, COUNT(DISTINCT nickname) AS users,
       AVG(total_return) AS avg_return, MAX(total_return) AS best_return, AVG(excess_return) AS avg_excess,
       AVG(sharpe) AS avg_sharpe, AVG(mdd) AS avg_mdd, AVG(trades) AS avg_trades,
       AVG(CASE WHEN excess_return > 0 THEN 1.0 ELSE 0.0 END) AS beat_benchmark_rate,
       AVG(jev_cost_usd) AS avg_cost_usd
-      FROM runs WHERE ${sql} GROUP BY strategy, effort, interval_days ORDER BY avg_excess DESC, avg_return DESC`, params);
+      FROM runs WHERE ${sql} GROUP BY strategy, effort, interval_days, threshold ORDER BY avg_excess DESC, avg_return DESC`, params);
   }
 
   /** 단일 서버 재시작 시: 끝나지 않은 실행을 모두 다시 대기열로 */

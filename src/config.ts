@@ -135,6 +135,11 @@ export const EFFORT_INFO: Record<Effort, { readonly label: string; readonly desc
 export const REBALANCE_THRESHOLD = 0.1;
 /** high effort에서 이 신뢰도 미만이면 기존 비중 유지 */
 export const HIGH_EFFORT_MIN_CONFIDENCE = 0.35;
-export const NOUL_BUY_THRESHOLD = 0.6;
-export const NOUL_SELL_THRESHOLD = 0.4;
+/** 사용자가 고르는 확신 임계값: Jev가 이 확률 이상일 때만 사고판다 */
+export const THRESHOLDS: readonly number[] = [0.95, 0.9, 0.85, 0.8, 0.75, 0.7];
+export const DEFAULT_THRESHOLD = 0.8;
+export const EXIT_RULES = {
+  opposite: { label: '반대 확신 매도', description: '내릴 확률이 임계값 이상일 때만 판다. 애매하면 보유 유지 (거래 적음)' },
+  drop: { label: '확신 떨어지면 즉시 매도', description: '오를 확률이 임계값 밑으로 내려가면 바로 판다 (거래 잦음)' },
+} as const;
 export const WARMUP_CALENDAR_DAYS = 120;

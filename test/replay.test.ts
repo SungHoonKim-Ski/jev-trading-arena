@@ -53,7 +53,12 @@ test('buildTimeline: 가격은 날짜에 맞춰 정렬, 빈 날은 직전 가격
   assert.deepEqual(t.closes.A, [1, 1, 3, 3]);
 });
 
-test('signalText: 전략별로 이해하기 쉬운 문장', () => {
+test('signalText: 임계값 도입 후 실행은 행동을 일으킨 확률과 기준을 함께 표시', () => {
+  assert.equal(signalText('noul', { action: 'buy', signal: 0.86, confidence: 0.5 }, 0.8), '오를 확률 86% (기준 80%)');
+  assert.equal(signalText('choice', { action: 'sell', signal: 0.91, confidence: 0.5 }, 0.9), '내릴 확률 91% (기준 90%)');
+});
+
+test('signalText: 임계값 도입 전 실행(threshold 없음)은 이전 문장', () => {
   assert.equal(signalText('noul', { signal: 0.71, confidence: 0.4 }), '오를 확률 71%');
   assert.equal(signalText('probability', { signal: 0.64, confidence: 0.5 }), '강세 확률 64%');
   assert.equal(signalText('choice', { signal: 0.8, confidence: 0.62 }), '확신도 62%');

@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { esc, meta, pct, signed, num, money, usd, strategyLabel, effortLabel, intervalLabel, marketLabel, engineBadge, tickersText, STATUS_LABEL, ACTION_LABEL } from '../format.js';
+import { esc, meta, pct, signed, num, money, usd, strategyLabel, effortLabel, intervalLabel, marketLabel, engineBadge, tickersText, STATUS_LABEL, ACTION_LABEL, thresholdLabel, exitRuleLabel } from '../format.js';
 import { lineChart } from '../charts.js';
 
 const DECISION_ROWS = 200;
@@ -22,7 +22,7 @@ function tiles(run, currency) {
 
 function decisionsTable(decisions, names) {
   const rows = decisions.slice(-DECISION_ROWS).reverse();
-  return `<div class="table-wrap scroll"><table><thead><tr><th>결정일</th><th>종목</th><th>판단</th><th class="num">목표 비중</th><th class="num">강세 신호</th><th class="num">신뢰도</th></tr></thead>
+  return `<div class="table-wrap scroll"><table><thead><tr><th>결정일</th><th>종목</th><th>판단</th><th class="num">목표 비중</th><th class="num">판단 확률</th><th class="num">신뢰도</th></tr></thead>
     <tbody>${rows.map((d) => `<tr><td>${esc(d.date)}</td><td>${esc(names[d.symbol] ?? d.symbol)}</td>
       <td class="${d.action === 'buy' ? 'pos' : d.action === 'sell' ? 'neg' : ''}">${esc(ACTION_LABEL[d.action])}</td>
       <td class="num">${d.targetWeight == null ? '유지' : `${Math.round(d.targetWeight * 100)}%`}</td>
@@ -62,7 +62,7 @@ export async function render(root, runId, { onBack }) {
   const header = `<a href="#" class="back">← 돌아가기</a>
     <h2>${engineBadge(run.engine)} ${esc(run.nickname)}의 ${esc(strategyLabel(run.strategy))} 전략</h2>
     <p class="lead">${esc(marketLabel(run.market))} · ${esc(tickersText(run))} · ${esc(run.start_date)} ~ ${esc(run.end_date)} ·
-      effort ${esc(effortLabel(run.effort))} · ${esc(intervalLabel(run.interval_days))} 판단 · ${EXECUTION_LABEL[run.execution] ?? '시가 체결'} · 초기 자본 ${esc(money(run.initial_capital, currency))}${run.model ? ` · 모델 ${esc(run.model)}` : ''}</p>`;
+      effort ${esc(effortLabel(run.effort))} · ${esc(intervalLabel(run.interval_days))} 판단 · 기준 ${esc(thresholdLabel(run.threshold))}${run.exit_rule ? `(${esc(exitRuleLabel(run.exit_rule))})` : ''} · ${EXECUTION_LABEL[run.execution] ?? '시가 체결'} · 초기 자본 ${esc(money(run.initial_capital, currency))}${run.model ? ` · 모델 ${esc(run.model)}` : ''}</p>`;
 
   if (run.status !== 'done') {
     root.innerHTML = `${header}<div class="card">상태: <b>${esc(STATUS_LABEL[run.status])}</b>${run.error ? `<p class="error">${esc(run.error)}</p>` : ''}

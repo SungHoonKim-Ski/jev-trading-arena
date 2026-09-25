@@ -74,6 +74,7 @@ function makeDecider(params: RunParams, symbols: readonly SymbolBars[], jev: Jev
     const interpreted = interpretAnswers({
       answers: res.answers, assetKeys: Object.keys(assets), strategy: params.strategy, effort: params.effort,
       currentWeights: Object.fromEntries(eligible.map((s) => [keyOf.get(s.symbol)!, ctx.currentWeights[s.symbol] ?? 0])),
+      threshold: params.threshold, exitRule: params.exitRule,
     });
     const targets: Record<string, number | null> = {};
     for (const s of eligible) {

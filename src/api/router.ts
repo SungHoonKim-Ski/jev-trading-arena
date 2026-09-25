@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { ALL_INTERVALS, CONFIG, EFFORT_INFO, MARKETS, STRATEGY_INFO } from '../config.ts';
+import { ALL_INTERVALS, CONFIG, DEFAULT_THRESHOLD, EFFORT_INFO, EXIT_RULES, MARKETS, STRATEGY_INFO, THRESHOLDS } from '../config.ts';
 import type { RunRepository } from '../db/runRepository.ts';
 import type { RunQueue } from '../backtest/queue.ts';
 import type { Effort, RunParams, Strategy } from '../types.ts';
@@ -28,6 +28,8 @@ export interface RouterDeps {
   /** 주기 작업(멈춘 실행 복구, 분봉 수집). 서버리스 크론에서 호출 */
   readonly onCron: () => Promise<unknown>;
   readonly ticks: TickStore | null;
+  /** 생성 요청 제한 (기본 CONFIG.rateLimit) */
+  readonly rateLimit?: { readonly maxCreates: number; readonly windowMs: number };
 }
 
 function expandCombos(input: CreateRunInput): RunParams[] {
@@ -35,7 +37,7 @@ function expandCombos(input: CreateRunInput): RunParams[] {
   return input.strategies.flatMap((strategy) => input.efforts.flatMap((effort) => input.intervals.map((intervalDays) => ({
     nickname: input.nickname, market: input.market, tickers, startDate: input.startDate, endDate: input.endDate,
     intervalDays, effort: effort as Effort, strategy: strategy as Strategy, initialCapital: input.initialCapital, engine: input.engine,
-    execution: input.execution,
+    execution: input.execution, threshold: input.threshold, exitRule: input.exitRule,
   }))));
 }
 
@@ -53,6 +55,9 @@ function meta(jevLive: boolean, ticksEnabled: boolean) {
     intervals: ALL_INTERVALS,
     maxRunsPerRequest: CONFIG.maxRunsPerRequest,
     intradaySpecs: INTRADAY_SPECS,
+    thresholds: THRESHOLDS,
+    defaultThreshold: DEFAULT_THRESHOLD,
+    exitRules: EXIT_RULES,
   };
 }
 
@@ -70,7 +75,8 @@ function applyCors(req: IncomingMessage, res: ServerResponse): void {
 export type RequestHandler = (req: IncomingMessage, res: ServerResponse) => Promise<void>;
 
 export function createRouter(deps: RouterDeps): RequestHandler {
-  const limiter = new RateLimiter(CONFIG.rateLimit.maxCreates, CONFIG.rateLimit.windowMs);
+  const limits = deps.rateLimit ?? CONFIG.rateLimit;
+  const limiter = new RateLimiter(limits.maxCreates, limits.windowMs);
 
   async function createRuns(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (!limiter.allow(clientIp(req, CONFIG.trustProxy))) throw new HttpError(429, '요청이 너무 많습니다. 잠시 후 다시 시도하세요');

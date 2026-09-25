@@ -98,6 +98,9 @@ const COLUMN_MIGRATIONS: readonly [table: string, column: string, ddl: string][]
   ['runs', 'fallback_fills', 'ALTER TABLE runs ADD COLUMN fallback_fills INTEGER'],
   ['runs', 'started_at', 'ALTER TABLE runs ADD COLUMN started_at TEXT'],
   ['runs', 'tick_fills', 'ALTER TABLE runs ADD COLUMN tick_fills INTEGER'],
+  // 임계값 도입 전 실행은 NULL (이전 규칙)
+  ['runs', 'threshold', 'ALTER TABLE runs ADD COLUMN threshold REAL'],
+  ['runs', 'exit_rule', 'ALTER TABLE runs ADD COLUMN exit_rule TEXT'],
 ];
 
 async function migrate(db: Db): Promise<void> {
