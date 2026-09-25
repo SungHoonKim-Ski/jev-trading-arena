@@ -146,13 +146,20 @@ export class RunRepository {
   async getDetail(id: number): Promise<Row | null> {
     const run = await this.get(id);
     if (!run) return null;
+    // 재생 화면용: 실행 종목의 기간 내 일봉 (시가·종가)
+    const symbols = Object.keys((run.symbol_names as Record<string, string> | null) ?? {});
+    const priceRows = symbols.length === 0 ? [] : await queryAll<{ symbol: string; date: string; open: number; close: number }>(this.#db,
+      `SELECT symbol, date, open, close FROM prices WHERE symbol IN (${symbols.map(() => '?').join(', ')}) AND date BETWEEN ? AND ? ORDER BY symbol, date`,
+      [...symbols, String(run.start_date), String(run.end_date)]);
+    const prices: Record<string, { date: string; open: number; close: number }[]> = {};
+    for (const { symbol, ...bar } of priceRows) prices[symbol] = [...(prices[symbol] ?? []), bar];
     const [equity, trades, decisions] = await Promise.all([
       queryAll(this.#db, 'SELECT date, equity, benchmark, idx AS "index" FROM run_equity WHERE run_id = ? ORDER BY date', [id]),
       queryAll(this.#db, 'SELECT date, symbol, side, shares, price, fee FROM run_trades WHERE run_id = ? ORDER BY id', [id]),
       queryAll(this.#db, `SELECT date, symbol, action, target_weight AS targetWeight, confidence, signal
         FROM run_decisions WHERE run_id = ? ORDER BY date, symbol`, [id]),
     ]);
-    return { run, equity, trades, decisions };
+    return { run, equity, trades, decisions, prices };
   }
 
   async list(opts: { nickname?: string; groupId?: string; limit: number }): Promise<Row[]> {
