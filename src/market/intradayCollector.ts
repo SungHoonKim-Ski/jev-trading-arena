@@ -42,8 +42,8 @@ export class IntradayCollector {
     for (const spec of INTRADAY_SPECS) {
       try {
         let count = 0;
-        for (const [from, to] of collectionWindows(spec, this.#repo.lastTs(symbol, spec.interval), this.#nowSec())) {
-          count += this.#repo.upsert(symbol, spec.interval, await this.#fetcher(symbol, spec.interval, from, to));
+        for (const [from, to] of collectionWindows(spec, await this.#repo.lastTs(symbol, spec.interval), this.#nowSec())) {
+          count += await this.#repo.upsert(symbol, spec.interval, await this.#fetcher(symbol, spec.interval, from, to));
           await this.#sleep(REQUEST_GAP_MS);
         }
         saved[spec.interval] = count;
@@ -66,9 +66,9 @@ export class IntradayCollector {
   }
 
   /** 주기 수집 시작 (추적 종목 목록은 호출 시점마다 새로 조회) */
-  startSchedule(listSymbols: () => readonly string[], everyMs: number): void {
+  startSchedule(listSymbols: () => Promise<readonly string[]>, everyMs: number): void {
     const run = async () => {
-      const symbols = listSymbols();
+      const symbols = await listSymbols();
       if (symbols.length === 0) return;
       const results = await this.collectMany(symbols);
       const total = results.reduce((s, r) => s + Object.values(r.saved).reduce((a, b) => a + (b ?? 0), 0), 0);

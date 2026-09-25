@@ -1,11 +1,18 @@
 import path from 'node:path';
 import type { Effort, Market, Strategy } from './types.ts';
 
-const root = path.resolve(import.meta.dirname, '..');
+// 번들(Vercel) 환경에서는 import.meta.dirname이 없을 수 있다
+const root = import.meta.dirname ? path.resolve(import.meta.dirname, '..') : process.cwd();
 
 export const CONFIG = {
   port: Number(process.env.PORT ?? 3000),
   dbPath: process.env.DB_PATH ?? path.join(root, 'data', 'trading.db'),
+  tursoUrl: process.env.TURSO_DATABASE_URL ?? '',
+  tursoToken: process.env.TURSO_AUTH_TOKEN,
+  cronSecret: process.env.CRON_SECRET ?? '',
+  allowedOrigins: (process.env.ALLOWED_ORIGINS ?? '*').split(',').map((s) => s.trim()).filter(Boolean),
+  /** 서버리스에서 이 시간 이상 running에 멈춘 실행은 크론이 다시 대기열로 되돌린다 */
+  staleRunMs: 15 * 60_000,
   publicDir: path.join(root, 'public'),
   jev: {
     apiKey: process.env.TYPESAFE_API_KEY ?? '',

@@ -5,7 +5,8 @@
  *   npm run collect -- US AAPL NVDA
  */
 import { CONFIG } from '../config.ts';
-import { openDatabase } from '../db/database.ts';
+import { openLocalDatabase } from '../db/client.node.ts';
+import { openRemoteDatabase } from '../db/client.web.ts';
 import { PriceRepository } from '../db/priceRepository.ts';
 import { IntradayRepository } from '../db/intradayRepository.ts';
 import { PriceService } from '../market/priceService.ts';
@@ -15,7 +16,7 @@ import type { Market } from '../types.ts';
 
 async function main(): Promise<void> {
   const [marketArg, ...tickers] = process.argv.slice(2);
-  const db = openDatabase(CONFIG.dbPath);
+  const db = CONFIG.tursoUrl ? await openRemoteDatabase(CONFIG.tursoUrl, CONFIG.tursoToken) : await openLocalDatabase(CONFIG.dbPath);
   const priceRepo = new PriceRepository(db);
   const prices = new PriceService(priceRepo);
   const collector = new IntradayCollector(new IntradayRepository(db));
@@ -27,7 +28,7 @@ async function main(): Promise<void> {
     symbols = [];
     for (const t of tickers) symbols.push((await prices.getBars(marketArg as Market, t, from, today)).symbol);
   } else {
-    symbols = priceRepo.listSymbols().filter((s) => !s.startsWith('^'));
+    symbols = (await priceRepo.listSymbols()).filter((s) => !s.startsWith('^'));
   }
   for (const r of await collector.collectMany(symbols)) {
     logger.info('collect', `${r.symbol}: ${JSON.stringify(r.saved)}${r.errors.length ? ` errors=${r.errors.join('; ')}` : ''}`);

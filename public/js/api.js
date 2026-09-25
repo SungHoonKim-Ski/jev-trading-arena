@@ -1,8 +1,10 @@
+const API_BASE = String(window.JEV_API_BASE ?? '').replace(/\/+$/, '');
+
 /** 서버 API 호출. 응답 envelope {success, data, error}를 풀어 data만 반환 */
 export async function api(path, options = {}) {
   let res;
   try {
-    res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...options });
+    res = await fetch(`${API_BASE}${path}`, { headers: { 'Content-Type': 'application/json' }, ...options });
   } catch {
     throw new Error('서버에 연결할 수 없습니다');
   }

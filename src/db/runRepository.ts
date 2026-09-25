@@ -1,6 +1,5 @@
-import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import type { AssetDecision, EquityPoint, Metrics, RunParams, RunStatus, Trade } from '../types.ts';
-import { transaction } from './database.ts';
+import { queryAll, queryOne, writeBatch, type Db, type SqlArg } from './database.ts';
 
 export interface RunSummary {
   readonly totalReturn: number;
@@ -42,7 +41,7 @@ type Row = Record<string, unknown>;
 const RUN_COLUMNS = `id, group_id, nickname, market, tickers, symbol_names, start_date, end_date, interval_days, effort,
   strategy, engine, model, initial_capital, status, progress, error, created_at, finished_at, total_return, cagr, mdd,
   sharpe, volatility, trades, fees, final_equity, benchmark_return, index_return, excess_return, jev_calls,
-  jev_input_tokens, jev_cost_usd, execution, intraday_fills, fallback_fills`;
+  jev_input_tokens, jev_cost_usd, execution, intraday_fills, fallback_fills, started_at`;
 
 function toRun(row: Row): Row {
   return {
@@ -52,9 +51,9 @@ function toRun(row: Row): Row {
   };
 }
 
-function whereClause(f: RankFilters): { sql: string; params: SQLInputValue[] } {
+function whereClause(f: RankFilters): { sql: string; params: SqlArg[] } {
   const parts: string[] = ["status = 'done'"];
-  const params: SQLInputValue[] = [];
+  const params: SqlArg[] = [];
   const eq = (col: string, v: string | number | undefined) => {
     if (v !== undefined && v !== '') { parts.push(`${col} = ?`); params.push(v); }
   };
@@ -64,19 +63,21 @@ function whereClause(f: RankFilters): { sql: string; params: SQLInputValue[] } {
 }
 
 export class RunRepository {
-  readonly #db: DatabaseSync;
-  constructor(db: DatabaseSync) { this.#db = db; }
+  readonly #db: Db;
+  constructor(db: Db) { this.#db = db; }
 
-  create(params: RunParams, groupId: string): number {
-    const r = this.#db.prepare(`INSERT INTO runs (group_id, nickname, market, tickers, start_date, end_date, interval_days,
-      effort, strategy, engine, execution, initial_capital, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?)`)
-      .run(groupId, params.nickname, params.market, JSON.stringify(params.tickers), params.startDate, params.endDate,
-        params.intervalDays, params.effort, params.strategy, params.engine, params.execution, params.initialCapital, new Date().toISOString());
+  async create(params: RunParams, groupId: string): Promise<number> {
+    const r = await this.#db.execute({
+      sql: `INSERT INTO runs (group_id, nickname, market, tickers, start_date, end_date, interval_days, effort, strategy, engine,
+        execution, initial_capital, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?)`,
+      args: [groupId, params.nickname, params.market, JSON.stringify(params.tickers), params.startDate, params.endDate,
+        params.intervalDays, params.effort, params.strategy, params.engine, params.execution, params.initialCapital, new Date().toISOString()],
+    });
     return Number(r.lastInsertRowid);
   }
 
-  getParams(id: number): RunParams | null {
-    const row = this.#db.prepare('SELECT * FROM runs WHERE id = ?').get(id) as Row | undefined;
+  async getParams(id: number): Promise<RunParams | null> {
+    const row = await queryOne<Row>(this.#db, 'SELECT * FROM runs WHERE id = ?', [id]);
     if (!row) return null;
     return {
       nickname: String(row.nickname), market: row.market as RunParams['market'], tickers: JSON.parse(String(row.tickers)),
@@ -87,94 +88,115 @@ export class RunRepository {
     };
   }
 
-  setStatus(id: number, status: RunStatus, error: string | null = null): void {
-    const finished = status === 'done' || status === 'failed' ? new Date().toISOString() : null;
-    this.#db.prepare('UPDATE runs SET status = ?, error = ?, finished_at = ? WHERE id = ?').run(status, error, finished, id);
-  }
-
-  setProgress(id: number, progress: number): void {
-    this.#db.prepare('UPDATE runs SET progress = ? WHERE id = ?').run(Math.max(0, Math.min(1, progress)), id);
-  }
-
-  setSymbolNames(id: number, names: Readonly<Record<string, string>>): void {
-    this.#db.prepare('UPDATE runs SET symbol_names = ? WHERE id = ?').run(JSON.stringify(names), id);
-  }
-
-  complete(id: number, a: RunArtifacts): void {
-    transaction(this.#db, () => {
-      this.#clearArtifacts(id);
-      const eq = this.#db.prepare('INSERT INTO run_equity (run_id, date, equity, benchmark, idx) VALUES (?, ?, ?, ?, ?)');
-      for (const p of a.equity) eq.run(id, p.date, p.equity, p.benchmark, p.index ?? null);
-      const tr = this.#db.prepare('INSERT INTO run_trades (run_id, date, symbol, side, shares, price, fee) VALUES (?, ?, ?, ?, ?, ?, ?)');
-      for (const t of a.trades) tr.run(id, t.date, t.symbol, t.side, t.shares, t.price, t.fee);
-      const de = this.#db.prepare('INSERT INTO run_decisions (run_id, date, symbol, action, target_weight, confidence, signal) VALUES (?, ?, ?, ?, ?, ?, ?)');
-      for (const d of a.decisions) de.run(id, d.date, d.symbol, d.action, d.targetWeight, d.confidence, d.signal);
-      const m = a.metrics, s = a.summary;
-      this.#db.prepare(`UPDATE runs SET status = 'done', progress = 1, error = NULL, finished_at = ?, model = ?,
-        total_return = ?, cagr = ?, mdd = ?, sharpe = ?, volatility = ?, trades = ?, fees = ?, final_equity = ?,
-        benchmark_return = ?, index_return = ?, excess_return = ?, jev_calls = ?, jev_input_tokens = ?, jev_cost_usd = ?,
-        intraday_fills = ?, fallback_fills = ? WHERE id = ?`).run(new Date().toISOString(), s.model, m.totalReturn, m.cagr, m.mdd, m.sharpe, m.volatility, m.trades,
-        m.fees, m.finalEquity, s.benchmarkReturn, s.indexReturn, m.totalReturn - s.benchmarkReturn, s.jevCalls,
-        s.jevInputTokens, s.jevCostUsd, s.intradayFills, s.fallbackFills, id);
+  async setStatus(id: number, status: RunStatus, error: string | null = null): Promise<void> {
+    const now = new Date().toISOString();
+    const finished = status === 'done' || status === 'failed' ? now : null;
+    await this.#db.execute({
+      sql: `UPDATE runs SET status = ?, error = ?, finished_at = ?, started_at = CASE WHEN ? = 'running' THEN ? ELSE started_at END WHERE id = ?`,
+      args: [status, error, finished, status, now, id],
     });
   }
 
-  #clearArtifacts(id: number): void {
-    for (const t of ['run_equity', 'run_trades', 'run_decisions']) this.#db.prepare(`DELETE FROM ${t} WHERE run_id = ?`).run(id);
+  /**
+   * 대기 중인 실행을 원자적으로 가져온다 (여러 서버리스 인스턴스가 같은 실행을 중복 처리하지 않도록).
+   * 성공하면 true.
+   */
+  async claim(id: number): Promise<boolean> {
+    const r = await this.#db.execute({
+      sql: "UPDATE runs SET status = 'running', started_at = ?, progress = 0 WHERE id = ? AND status = 'queued'",
+      args: [new Date().toISOString(), id],
+    });
+    return r.rowsAffected === 1;
   }
 
-  get(id: number): Row | null {
-    const row = this.#db.prepare(`SELECT ${RUN_COLUMNS} FROM runs WHERE id = ?`).get(id) as Row | undefined;
+  async setProgress(id: number, progress: number): Promise<void> {
+    await this.#db.execute({ sql: 'UPDATE runs SET progress = ? WHERE id = ?', args: [Math.max(0, Math.min(1, progress)), id] });
+  }
+
+  async setSymbolNames(id: number, names: Readonly<Record<string, string>>): Promise<void> {
+    await this.#db.execute({ sql: 'UPDATE runs SET symbol_names = ? WHERE id = ?', args: [JSON.stringify(names), id] });
+  }
+
+  async complete(id: number, a: RunArtifacts): Promise<void> {
+    const m = a.metrics, s = a.summary;
+    await writeBatch(this.#db, [
+      ...['run_equity', 'run_trades', 'run_decisions'].map((t) => ({ sql: `DELETE FROM ${t} WHERE run_id = ?`, args: [id] })),
+      ...a.equity.map((p) => ({ sql: 'INSERT INTO run_equity (run_id, date, equity, benchmark, idx) VALUES (?, ?, ?, ?, ?)', args: [id, p.date, p.equity, p.benchmark, p.index ?? null] })),
+      ...a.trades.map((t) => ({ sql: 'INSERT INTO run_trades (run_id, date, symbol, side, shares, price, fee) VALUES (?, ?, ?, ?, ?, ?, ?)', args: [id, t.date, t.symbol, t.side, t.shares, t.price, t.fee] })),
+      ...a.decisions.map((d) => ({ sql: 'INSERT INTO run_decisions (run_id, date, symbol, action, target_weight, confidence, signal) VALUES (?, ?, ?, ?, ?, ?, ?)', args: [id, d.date, d.symbol, d.action, d.targetWeight, d.confidence, d.signal] })),
+      // 완료 표시는 마지막: 중간에 끊기면 완료로 보이지 않는다
+      {
+        sql: `UPDATE runs SET status = 'done', progress = 1, error = NULL, finished_at = ?, model = ?,
+          total_return = ?, cagr = ?, mdd = ?, sharpe = ?, volatility = ?, trades = ?, fees = ?, final_equity = ?,
+          benchmark_return = ?, index_return = ?, excess_return = ?, jev_calls = ?, jev_input_tokens = ?, jev_cost_usd = ?,
+          intraday_fills = ?, fallback_fills = ? WHERE id = ?`,
+        args: [new Date().toISOString(), s.model, m.totalReturn, m.cagr, m.mdd, m.sharpe, m.volatility, m.trades,
+          m.fees, m.finalEquity, s.benchmarkReturn, s.indexReturn, m.totalReturn - s.benchmarkReturn, s.jevCalls,
+          s.jevInputTokens, s.jevCostUsd, s.intradayFills, s.fallbackFills, id],
+      },
+    ]);
+  }
+
+  async get(id: number): Promise<Row | null> {
+    const row = await queryOne<Row>(this.#db, `SELECT ${RUN_COLUMNS} FROM runs WHERE id = ?`, [id]);
     return row ? toRun(row) : null;
   }
 
-  getDetail(id: number): Row | null {
-    const run = this.get(id);
+  async getDetail(id: number): Promise<Row | null> {
+    const run = await this.get(id);
     if (!run) return null;
-    return {
-      run,
-      equity: this.#db.prepare('SELECT date, equity, benchmark, idx AS "index" FROM run_equity WHERE run_id = ? ORDER BY date').all(id),
-      trades: this.#db.prepare('SELECT date, symbol, side, shares, price, fee FROM run_trades WHERE run_id = ? ORDER BY id').all(id),
-      decisions: this.#db.prepare(`SELECT date, symbol, action, target_weight AS targetWeight, confidence, signal
-        FROM run_decisions WHERE run_id = ? ORDER BY date, symbol`).all(id),
-    };
+    const [equity, trades, decisions] = await Promise.all([
+      queryAll(this.#db, 'SELECT date, equity, benchmark, idx AS "index" FROM run_equity WHERE run_id = ? ORDER BY date', [id]),
+      queryAll(this.#db, 'SELECT date, symbol, side, shares, price, fee FROM run_trades WHERE run_id = ? ORDER BY id', [id]),
+      queryAll(this.#db, `SELECT date, symbol, action, target_weight AS targetWeight, confidence, signal
+        FROM run_decisions WHERE run_id = ? ORDER BY date, symbol`, [id]),
+    ]);
+    return { run, equity, trades, decisions };
   }
 
-  list(opts: { nickname?: string; groupId?: string; limit: number }): Row[] {
+  async list(opts: { nickname?: string; groupId?: string; limit: number }): Promise<Row[]> {
     const parts: string[] = [];
-    const params: SQLInputValue[] = [];
+    const params: SqlArg[] = [];
     if (opts.nickname) { parts.push('nickname = ?'); params.push(opts.nickname); }
     if (opts.groupId) { parts.push('group_id = ?'); params.push(opts.groupId); }
     const where = parts.length ? `WHERE ${parts.join(' AND ')}` : '';
-    return (this.#db.prepare(`SELECT ${RUN_COLUMNS} FROM runs ${where} ORDER BY id DESC LIMIT ?`).all(...params, opts.limit) as Row[]).map(toRun);
+    return (await queryAll<Row>(this.#db, `SELECT ${RUN_COLUMNS} FROM runs ${where} ORDER BY id DESC LIMIT ?`, [...params, opts.limit])).map(toRun);
   }
 
   /** 수익률 랭킹. bestPerUser=true면 닉네임당 최고 기록 1개만 */
-  leaderboard(f: RankFilters, sort: SortColumn, limit: number, bestPerUser: boolean): Row[] {
+  async leaderboard(f: RankFilters, sort: SortColumn, limit: number, bestPerUser: boolean): Promise<Row[]> {
     const { sql, params } = whereClause(f);
     const order = `${sort} DESC, id ASC`;
     const inner = `SELECT ${RUN_COLUMNS}, ROW_NUMBER() OVER (PARTITION BY nickname ORDER BY ${order}) AS user_rank FROM runs WHERE ${sql}`;
-    const rows = this.#db.prepare(
-      `SELECT * FROM (${inner}) ${bestPerUser ? 'WHERE user_rank = 1' : ''} ORDER BY ${order} LIMIT ?`,
-    ).all(...params, limit) as Row[];
+    const rows = await queryAll<Row>(this.#db,
+      `SELECT * FROM (${inner}) ${bestPerUser ? 'WHERE user_rank = 1' : ''} ORDER BY ${order} LIMIT ?`, [...params, limit]);
     return rows.map((r, i) => ({ ...toRun(r), rank: i + 1 }));
   }
 
   /** 전략(Jev 응답 방식) × effort × 매매 주기 조합별 평균 성과 */
-  strategyStats(f: RankFilters): Row[] {
+  async strategyStats(f: RankFilters): Promise<Row[]> {
     const { sql, params } = whereClause(f);
-    return this.#db.prepare(`SELECT strategy, effort, interval_days, COUNT(*) AS runs, COUNT(DISTINCT nickname) AS users,
+    return queryAll<Row>(this.#db, `SELECT strategy, effort, interval_days, COUNT(*) AS runs, COUNT(DISTINCT nickname) AS users,
       AVG(total_return) AS avg_return, MAX(total_return) AS best_return, AVG(excess_return) AS avg_excess,
       AVG(sharpe) AS avg_sharpe, AVG(mdd) AS avg_mdd, AVG(trades) AS avg_trades,
       AVG(CASE WHEN excess_return > 0 THEN 1.0 ELSE 0.0 END) AS beat_benchmark_rate,
       AVG(jev_cost_usd) AS avg_cost_usd
-      FROM runs WHERE ${sql} GROUP BY strategy, effort, interval_days ORDER BY avg_excess DESC, avg_return DESC`).all(...params) as Row[];
+      FROM runs WHERE ${sql} GROUP BY strategy, effort, interval_days ORDER BY avg_excess DESC, avg_return DESC`, params);
   }
 
-  /** 서버 재시작 시 끝나지 않은 실행을 다시 대기열로 */
-  requeueUnfinished(): number[] {
-    const rows = this.#db.prepare("SELECT id FROM runs WHERE status IN ('queued', 'running') ORDER BY id").all() as { id: number }[];
-    this.#db.prepare("UPDATE runs SET status = 'queued', progress = 0 WHERE status = 'running'").run();
-    return rows.map((r) => Number(r.id));
+  /** 단일 서버 재시작 시: 끝나지 않은 실행을 모두 다시 대기열로 */
+  async requeueUnfinished(): Promise<number[]> {
+    await this.#db.execute("UPDATE runs SET status = 'queued', progress = 0 WHERE status = 'running'");
+    return (await queryAll<{ id: number }>(this.#db, "SELECT id FROM runs WHERE status = 'queued' ORDER BY id")).map((r) => Number(r.id));
+  }
+
+  /**
+   * 서버리스용 복구: staleMs 이상 'running'에 멈춘 실행(함수 시간 초과 등)을 대기열로 되돌리고,
+   * 대기 중인 실행 id를 반환한다.
+   */
+  async recoverStale(staleMs: number, limit: number): Promise<number[]> {
+    const cutoff = new Date(Date.now() - staleMs).toISOString();
+    await this.#db.execute({ sql: "UPDATE runs SET status = 'queued', progress = 0 WHERE status = 'running' AND started_at < ?", args: [cutoff] });
+    return (await queryAll<{ id: number }>(this.#db, "SELECT id FROM runs WHERE status = 'queued' ORDER BY id LIMIT ?", [limit])).map((r) => Number(r.id));
   }
 }

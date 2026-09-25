@@ -29,18 +29,18 @@ export class PriceService {
 
   async getBars(market: Market, input: string, from: string, to: string): Promise<SymbolBars> {
     for (const symbol of candidateSymbols(market, input)) {
-      const cov = this.#repo.getCoverage(symbol);
-      const info = this.#repo.getSymbol(symbol);
+      const [cov, info] = await Promise.all([this.#repo.getCoverage(symbol), this.#repo.getSymbol(symbol)]);
       if (cov && info && cov.startDate <= from && cov.endDate >= to) {
-        return { symbol, name: info.name, currency: info.currency, bars: this.#repo.getBars(symbol, from, to) };
+        return { symbol, name: info.name, currency: info.currency, bars: await this.#repo.getBars(symbol, from, to) };
       }
     }
-    const existing = candidateSymbols(market, input).map((s) => this.#repo.getCoverage(s)).find(Boolean);
+    const coverages = await Promise.all(candidateSymbols(market, input).map((s) => this.#repo.getCoverage(s)));
+    const existing = coverages.find(Boolean);
     const fetchFrom = existing && existing.startDate < from ? existing.startDate : from;
     const fetchTo = existing && existing.endDate > to ? existing.endDate : to;
     const chart = await this.#fetcher(market, input, fetchFrom, fetchTo);
     const coveredTo = fetchTo < yesterday(this.#now()) ? fetchTo : yesterday(this.#now());
-    this.#repo.saveBars(
+    await this.#repo.saveBars(
       { symbol: chart.symbol, market, name: chart.name, currency: chart.currency },
       chart.bars,
       { startDate: fetchFrom, endDate: coveredTo, fetchedAt: this.#now().toISOString() },

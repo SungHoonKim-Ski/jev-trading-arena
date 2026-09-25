@@ -1,7 +1,8 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
-import { openDatabase } from '../src/db/database.ts';
+import { createServer, type Server } from 'node:http';
+import { openLocalDatabase } from '../src/db/client.node.ts';
 import { createApp, type App } from '../src/app.ts';
 import type { BarFetcher } from '../src/market/priceService.ts';
 import { MockJevClient } from '../src/jev/mockClient.ts';
@@ -33,14 +34,16 @@ let liveCalls = 0;
 const fakeLive: JevClient = { mode: 'live', evaluate: async (r) => { liveCalls++; return new MockJevClient().evaluate(r); } };
 
 let app: App;
+let server: Server;
 let base: string;
 
 before(async () => {
-  app = createApp({ db: openDatabase(':memory:'), fetcher: fakeFetcher, liveJev: fakeLive, intradayFetcher: fakeIntraday });
-  await new Promise<void>((r) => app.server.listen(0, r));
-  base = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`;
+  app = createApp({ db: await openLocalDatabase(':memory:'), fetcher: fakeFetcher, liveJev: fakeLive, intradayFetcher: fakeIntraday });
+  server = createServer((req, res) => { void app.handle(req, res); });
+  await new Promise<void>((r) => server.listen(0, r));
+  base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
-after(() => app.server.close());
+after(() => server.close());
 
 const body = (over: Record<string, unknown> = {}) => ({
   nickname: '테스터', market: 'US', tickers: ['AAPL', 'MSFT'], startDate: '2024-01-02', endDate: '2024-06-28',
@@ -160,4 +163,24 @@ test('POST /api/data/collect: 종목 확인 후 분봉 수집, 잘못된 입력�
   assert.equal(bad.status, 400);
   const invalid = await fetch(`${base}/api/data/collect`, { method: 'POST', body: JSON.stringify({ market: 'US', tickers: ['<x>'] }) });
   assert.equal(invalid.status, 400);
+});
+
+test('CORS: 다른 출처(GitHub Pages)에서 호출 가능, preflight 204', async () => {
+  const pre = await fetch(`${base}/api/runs`, { method: 'OPTIONS', headers: { Origin: 'https://example.github.io', 'Access-Control-Request-Method': 'POST' } });
+  assert.equal(pre.status, 204);
+  assert.equal(pre.headers.get('access-control-allow-origin'), '*');
+  const res = await fetch(`${base}/api/meta`, { headers: { Origin: 'https://example.github.io' } });
+  assert.equal(res.headers.get('access-control-allow-origin'), '*');
+});
+
+test('크론 엔드포인트: CRON_SECRET 없으면 비활성(404)', async () => {
+  assert.equal((await fetch(`${base}/api/cron/tick`)).status, 404);
+});
+
+test('tick: 멈춘 실행 복구 후 재실행', async () => {
+  const id = await app.runs.create({ nickname: 'stuck', market: 'US', tickers: ['AAPL'], startDate: '2024-01-02', endDate: '2024-03-29',
+    intervalDays: 5, effort: 'low', strategy: 'noul', initialCapital: 10000, engine: 'mock', execution: 'open' }, 'gs');
+  const result = await app.tick();
+  assert.ok(result.requeued >= 1);
+  assert.equal((await app.runs.get(id))!.status, 'done');
 });

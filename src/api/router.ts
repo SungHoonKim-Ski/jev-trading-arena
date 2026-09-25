@@ -22,6 +22,8 @@ export interface RouterDeps {
   readonly intraday: IntradayRepository;
   readonly collector: IntradayCollector;
   readonly prices: PriceService;
+  /** 주기 작업(멈춘 실행 복구, 분봉 수집). 서버리스 크론에서 호출 */
+  readonly onCron: () => Promise<unknown>;
 }
 
 function expandCombos(input: CreateRunInput): RunParams[] {
@@ -47,25 +49,46 @@ function meta(jevLive: boolean) {
   };
 }
 
-export function createRouter(deps: RouterDeps) {
+/** GitHub Pages 등 다른 출처의 프론트엔드가 API를 호출할 수 있도록 CORS 허용 */
+function applyCors(req: IncomingMessage, res: ServerResponse): void {
+  const origin = req.headers.origin;
+  const allowed = CONFIG.allowedOrigins;
+  if (allowed.includes('*')) res.setHeader('Access-Control-Allow-Origin', '*');
+  else if (origin && allowed.includes(origin)) { res.setHeader('Access-Control-Allow-Origin', origin); res.setHeader('Vary', 'Origin'); }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Max-Age', '86400');
+}
+
+/** 프록시(Vercel) 뒤에서는 x-forwarded-for의 첫 주소가 실제 클라이언트 */
+function clientIp(req: IncomingMessage): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  const first = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',')[0]?.trim();
+  return first || req.socket.remoteAddress || 'unknown';
+}
+
+export type RequestHandler = (req: IncomingMessage, res: ServerResponse) => Promise<void>;
+
+export function createRouter(deps: RouterDeps): RequestHandler {
   const limiter = new RateLimiter(CONFIG.rateLimit.maxCreates, CONFIG.rateLimit.windowMs);
 
   async function createRuns(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    if (!limiter.allow(req.socket.remoteAddress ?? 'unknown')) throw new HttpError(429, '요청이 너무 많습니다. 잠시 후 다시 시도하세요');
+    if (!limiter.allow(clientIp(req))) throw new HttpError(429, '요청이 너무 많습니다. 잠시 후 다시 시도하세요');
     const parsed = createRunSchema.safeParse(await readJson(req));
     if (!parsed.success) throw new HttpError(400, formatZodError(parsed.error));
     if (parsed.data.engine === 'live' && !deps.jevLive) throw new HttpError(400, 'TYPESAFE_API_KEY가 설정되지 않아 실제 Jev 엔진을 사용할 수 없습니다');
     const combos = expandCombos(parsed.data);
     if (combos.length > CONFIG.maxRunsPerRequest) throw new HttpError(400, `조합이 ${combos.length}개입니다. 한 번에 최대 ${CONFIG.maxRunsPerRequest}개까지 실행할 수 있습니다`);
     const groupId = randomUUID();
-    const ids = combos.map((c) => deps.runs.create(c, groupId));
+    const ids: number[] = [];
+    for (const c of combos) ids.push(await deps.runs.create(c, groupId));
     deps.queue.enqueue(ids);
     ok(res, { groupId, runIds: ids }, 202);
   }
 
   /** 종목을 일봉으로 먼저 확인(심볼 확정)한 뒤 분봉 수집 */
   async function collectIntraday(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    if (!limiter.allow(req.socket.remoteAddress ?? 'unknown')) throw new HttpError(429, '요청이 너무 많습니다. 잠시 후 다시 시도하세요');
+    if (!limiter.allow(clientIp(req))) throw new HttpError(429, '요청이 너무 많습니다. 잠시 후 다시 시도하세요');
     const parsed = collectSchema.safeParse(await readJson(req));
     if (!parsed.success) throw new HttpError(400, formatZodError(parsed.error));
     const today = new Date().toISOString().slice(0, 10);
@@ -81,8 +104,14 @@ export function createRouter(deps: RouterDeps) {
     ok(res, await deps.collector.collectMany(symbols));
   }
 
-  function getRun(res: ServerResponse, id: number): void {
-    const detail = deps.runs.getDetail(id);
+  /** Vercel Cron은 Authorization: Bearer <CRON_SECRET> 헤더를 붙여 호출한다. 비밀값이 없으면 비활성 */
+  async function cron(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (!CONFIG.cronSecret || req.headers.authorization !== `Bearer ${CONFIG.cronSecret}`) throw new HttpError(404, '존재하지 않는 API입니다');
+    ok(res, await deps.onCron());
+  }
+
+  async function getRun(res: ServerResponse, id: number): Promise<void> {
+    const detail = await deps.runs.getDetail(id);
     if (!detail) throw new HttpError(404, '실행 기록을 찾을 수 없습니다');
     ok(res, detail);
   }
@@ -102,7 +131,7 @@ export function createRouter(deps: RouterDeps) {
     if (pathname === '/api/runs' && method === 'POST') return createRuns(req, res);
     if (pathname === '/api/runs' && method === 'GET') {
       const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') ?? 50) || 50));
-      return ok(res, deps.runs.list({
+      return ok(res, await deps.runs.list({
         nickname: url.searchParams.get('nickname')?.trim() || undefined,
         groupId: url.searchParams.get('groupId')?.trim() || undefined,
         limit,
@@ -112,10 +141,11 @@ export function createRouter(deps: RouterDeps) {
     if (runMatch && method === 'GET') return getRun(res, Number(runMatch[1]));
     if (pathname === '/api/leaderboard' && method === 'GET') {
       const q = rankQuery(url);
-      return ok(res, deps.runs.leaderboard(q, q.sort, q.limit, q.bestPerUser));
+      return ok(res, await deps.runs.leaderboard(q, q.sort, q.limit, q.bestPerUser));
     }
-    if (pathname === '/api/stats' && method === 'GET') return ok(res, deps.runs.strategyStats(rankQuery(url)));
-    if (pathname === '/api/data/coverage' && method === 'GET') return ok(res, deps.intraday.coverage());
+    if (pathname === '/api/stats' && method === 'GET') return ok(res, await deps.runs.strategyStats(rankQuery(url)));
+    if (pathname === '/api/data/coverage' && method === 'GET') return ok(res, await deps.intraday.coverage());
+    if (pathname === '/api/cron/tick' && method === 'GET') return cron(req, res);
     if (pathname === '/api/data/collect' && method === 'POST') return collectIntraday(req, res);
     if (pathname.startsWith('/api/')) throw new HttpError(404, '존재하지 않는 API입니다');
     if (method === 'GET' && (await serveStatic(deps.publicDir, pathname, res))) return;
@@ -123,6 +153,8 @@ export function createRouter(deps: RouterDeps) {
   }
 
   return async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    applyCors(req, res);
+    if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
     try {
       await route(req, res);
     } catch (err) {
