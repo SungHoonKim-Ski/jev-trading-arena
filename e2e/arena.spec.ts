@@ -14,6 +14,13 @@ test('간단 매매: 전략 1개 선택 → 하루씩 재생 → 결과 카드 �
   await expect(page.getByRole('radio', { name: /오를까/ })).not.toBeChecked();
   await expect(page.locator('input[name="strategy"]:checked')).toHaveCount(1);
   await page.getByRole('radio', { name: '6개월' }).check();
+  // 무엇을 살지도 하나만: 개별 종목·ETF 묶음, 종목코드 입력칸 없음
+  await expect(page.getByText('개별 종목')).toBeVisible();
+  await expect(page.getByText('ETF', { exact: true })).toBeVisible();
+  await expect(page.locator('#ticker-input')).toHaveCount(0);
+  await expect(page.locator('.simple-form input[type="checkbox"]:not([name="compare"]):not(.compare-box input)')).toHaveCount(0);
+  await page.getByRole('radio', { name: 'S&P 500 (SPY)' }).check();
+  await expect(page.locator('input[name="ticker"]:checked')).toHaveCount(1);
   await page.getByLabel('닉네임').fill('e2e_user');
   await page.getByRole('button', { name: '▶ 매매 시작' }).click();
 
@@ -28,6 +35,7 @@ test('간단 매매: 전략 1개 선택 → 하루씩 재생 → 결과 카드 �
   await expect(page.locator('#rank')).toHaveText(/\d+위 \/ \d+/);
   await expect(page.locator('#feed li').first()).toBeVisible();
   await expect(page.locator('#price-chart svg path.series')).toHaveCount(1);
+  await expect(page.locator('#sym-tabs .chip')).toHaveCount(0); // 종목 하나
   await expect(page.locator('#race svg path.series')).toHaveCount(2);
 
   await page.getByRole('link', { name: '랭킹', exact: true }).first().click();
@@ -51,10 +59,11 @@ test('닉네임이 없으면 한국어로 안내', async ({ page }) => {
 
 test('코인: 5종 칩만 제공, 고급 설정의 여러 조합 비교는 결과 표로', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('radio', { name: /코인/ }).check();
-  await expect(page.locator('#preset-chips .chip')).toHaveCount(5);
+  await page.locator('input[name="market"][value="CRYPTO"]').check();
+  await expect(page.locator('input[name="ticker"]')).toHaveCount(5);
   await expect(page.locator('#ticker-input')).toHaveCount(0);
-  await page.getByRole('button', { name: '솔라나' }).click();
+  await page.getByRole('radio', { name: '솔라나' }).check();
+  await expect(page.locator('input[name="ticker"]:checked')).toHaveCount(1);
   await page.getByLabel('닉네임').fill('coin_e2e');
   await page.getByText('고급 설정').click();
   await expect(page.getByText('7일마다 판단')).toBeVisible();
@@ -67,5 +76,5 @@ test('코인: 5종 칩만 제공, 고급 설정의 여러 조합 비교는 결�
   await expect(result.locator('tbody tr')).toHaveCount(2);
   await result.locator('tbody tr').first().click();
   await expect(page).toHaveURL(/#play\/\d+/);
-  await expect(page.locator('#sym-tabs .chip')).toHaveCount(3);
+  await expect(page.locator('#sym-tabs')).toContainText('SOLUSDT');
 });

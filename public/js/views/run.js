@@ -9,12 +9,13 @@ const EFFORT_DEFAULT = 'medium';
 
 const state = {
   market: 'US',
-  tickers: { KR: ['005930', '000660'], US: ['AAPL', 'NVDA'], CRYPTO: ['BTC', 'ETH'] },
+  // 시장별로 고른 종목 하나 (단일 선택)
+  ticker: { KR: '005930', US: 'AAPL', CRYPTO: 'BTC' },
   months: 12,
   strategy: 'noul',
 };
 
-const TICKER_PLACEHOLDER = { KR: '종목코드 6자리 (예: 005930)', US: '티커 (예: AAPL)' };
+const KIND_LABEL = { stock: '개별 종목', etf: 'ETF', coin: '코인' };
 
 const yesterday = () => new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
 const monthsAgo = (months) => {
@@ -84,9 +85,8 @@ function template(m) {
     <fieldset class="step"><legend class="step-label">1. 어떤 시장?</legend>
       <div class="market-cards">${Object.keys(m.markets).map((k) => `<label class="market-card choice"><input type="radio" name="market" value="${k}" ${k === state.market ? 'checked' : ''} />
         <span class="dot" aria-hidden="true"></span><span class="emoji" aria-hidden="true">${MARKET_CARDS[k][0]}</span>${esc(MARKET_CARDS[k][1])}</label>`).join('')}</div></fieldset>
-    <div class="step"><div class="step-label">2. 무엇을? <span class="hint">최대 5개</span></div>
-      <div class="chips" id="preset-chips"></div>
-      ${state.market === 'CRYPTO' ? '' : `<div class="row" style="margin-top:8px"><input type="text" id="ticker-input" placeholder="${esc(TICKER_PLACEHOLDER[state.market])}" /><button type="button" class="ghost" id="ticker-add">추가</button></div>`}</div>
+    <fieldset class="step"><legend class="step-label">2. 무엇을? <span class="hint">하나를 고르세요</span></legend>
+      ${assetGroups(m)}</fieldset>
     <fieldset class="step"><legend class="step-label">3. 언제부터? <span class="hint">어제까지</span></legend>
       <div class="chips">${PERIODS.map(([mo, l]) => `<label class="chip big choice"><input type="radio" name="months" value="${mo}" ${mo === state.months ? 'checked' : ''} /><span class="dot" aria-hidden="true"></span>${l}</label>`).join('')}</div></fieldset>
     <fieldset class="step"><legend class="step-label">4. Jev에게 어떻게 물을까? <span class="hint">하나를 고르세요</span></legend>
@@ -102,13 +102,13 @@ function template(m) {
   <div id="group-result"></div>`;
 }
 
-function renderChips(root, m) {
-  const selected = state.tickers[state.market];
+/** 대표 개별 종목·ETF(코인은 5종)를 종류별로 묶은 라디오 목록 */
+function assetGroups(m) {
   const presets = m.presets[state.market];
-  const known = new Set(presets.map((p) => p.ticker));
-  const extra = selected.filter((t) => !known.has(t)).map((t) => ({ ticker: t, name: t }));
-  root.querySelector('#preset-chips').innerHTML = [...presets, ...extra].map((p) =>
-    `<button type="button" class="chip big ${selected.includes(p.ticker) ? 'on' : ''}" data-ticker="${esc(p.ticker)}" aria-pressed="${selected.includes(p.ticker)}">${esc(p.name)}</button>`).join('');
+  const kinds = [...new Set(presets.map((p) => p.kind))];
+  return kinds.map((kind) => `<div class="asset-group"><div class="group-label">${esc(KIND_LABEL[kind] ?? kind)}</div>
+    <div class="chips">${presets.filter((p) => p.kind === kind).map((p) => `<label class="chip big choice"><input type="radio" name="ticker" value="${esc(p.ticker)}" ${p.ticker === state.ticker[state.market] ? 'checked' : ''} />
+      <span class="dot" aria-hidden="true"></span>${esc(p.name)}</label>`).join('')}</div></div>`).join('');
 }
 
 function formValues(form) {
@@ -118,7 +118,7 @@ function formValues(form) {
   return {
     nickname: String(fd.get('nickname') ?? '').trim(),
     market: state.market,
-    tickers: state.tickers[state.market],
+    tickers: [String(fd.get('ticker') ?? state.ticker[state.market])],
     startDate: String(fd.get('startDate')),
     endDate: String(fd.get('endDate')),
     initialCapital: Number(fd.get('initialCapital')),
@@ -139,11 +139,6 @@ function updateCount(form) {
   form.querySelector('.start').textContent = v.compare ? `▶ ${n}개 조합 비교` : '▶ 매매 시작';
 }
 
-function toggleTicker(t) {
-  const list = state.tickers[state.market];
-  state.tickers[state.market] = list.includes(t) ? list.filter((x) => x !== t) : list.length >= 5 ? list : [...list, t];
-}
-
 function pressOne(root, selector, target) {
   root.querySelectorAll(selector).forEach((x) => x.setAttribute('aria-pressed', String(x === target)));
 }
@@ -158,21 +153,7 @@ function bindChoices(root, m, form, onOpenRun) {
     form.endDate.value = yesterday();
   }));
   for (const attr of ['data-engine', 'data-execution']) root.querySelectorAll(`[${attr}]`).forEach((b) => b.addEventListener('click', () => pressOne(root, `[${attr}]`, b)));
-  root.querySelector('#preset-chips').addEventListener('click', (e) => {
-    const chip = e.target.closest('[data-ticker]');
-    if (!chip) return;
-    toggleTicker(chip.dataset.ticker);
-    renderChips(root, m);
-  });
-  const addTicker = () => {
-    const input = root.querySelector('#ticker-input');
-    const t = input.value.trim().toUpperCase();
-    if (t && !state.tickers[state.market].includes(t)) toggleTicker(t);
-    input.value = '';
-    renderChips(root, m);
-  };
-  root.querySelector('#ticker-add')?.addEventListener('click', addTicker);
-  root.querySelector('#ticker-input')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addTicker(); } });
+  form.querySelectorAll('input[name="ticker"]').forEach((r) => r.addEventListener('change', () => { state.ticker[state.market] = r.value; }));
   form.compare.addEventListener('change', () => { form.querySelector('.compare-box').hidden = !form.compare.checked; updateCount(form); });
   form.addEventListener('change', () => updateCount(form));
   form.nickname.addEventListener('input', () => saveNick(form.nickname.value.trim()));
@@ -181,7 +162,6 @@ function bindChoices(root, m, form, onOpenRun) {
 function bind(root, m, onOpenRun) {
   const form = root.querySelector('#run-form');
   const err = root.querySelector('#form-error');
-  renderChips(root, m);
   bindChoices(root, m, form, onOpenRun);
   updateCount(form);
   form.addEventListener('submit', async (e) => {
