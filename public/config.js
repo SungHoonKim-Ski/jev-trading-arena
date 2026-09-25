@@ -1,2 +1,2 @@
-// API 서버 주소. 같은 서버에서 화면을 제공하면 빈 문자열. GitHub Pages 배포 시 워크플로가 Vercel 주소로 덮어쓴다.
+// API 서버 주소. 화면과 API를 같은 서버(Vercel 또는 로컬)에서 제공하므로 빈 문자열이면 같은 출처를 쓴다.
 window.JEV_API_BASE = '';

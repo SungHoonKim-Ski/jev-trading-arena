@@ -56,7 +56,7 @@ function meta(jevLive: boolean, ticksEnabled: boolean) {
   };
 }
 
-/** GitHub Pages 등 다른 출처의 프론트엔드가 API를 호출할 수 있도록 CORS 허용 */
+/** 허용된 출처(ALLOWED_ORIGINS)의 프론트엔드만 API를 호출할 수 있도록 CORS 설정 */
 function applyCors(req: IncomingMessage, res: ServerResponse): void {
   const origin = req.headers.origin;
   const allowed = CONFIG.allowedOrigins;
