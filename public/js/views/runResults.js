@@ -1,5 +1,5 @@
 import { api, qs } from '../api.js';
-import { esc, signed, strategyLabel, effortLabel, intervalLabel, STATUS_LABEL, engineBadge, num } from '../format.js';
+import { esc, signed, thresholdLabel, legacyTag, effortLabel, intervalLabel, STATUS_LABEL, engineBadge, num } from '../format.js';
 
 const POLL_MS = 1500;
 let pollTimer = null;
@@ -7,10 +7,10 @@ let pollTimer = null;
 function groupTable(runs) {
   const sorted = [...runs].sort((a, b) => (b.total_return ?? -Infinity) - (a.total_return ?? -Infinity));
   return `<div class="table-wrap"><table>
-    <thead><tr><th>전략</th><th>effort</th><th>주기</th><th>상태</th><th class="num">수익률</th><th class="num">보유 대비</th><th class="num">MDD</th><th class="num">Sharpe</th><th class="num">거래</th></tr></thead>
+    <thead><tr><th>확신 기준</th><th>effort</th><th>주기</th><th>상태</th><th class="num">수익률</th><th class="num">보유 대비</th><th class="num">MDD</th><th class="num">Sharpe</th><th class="num">거래</th></tr></thead>
     <tbody>${sorted.map((r) => `
       <tr class="clickable" data-run="${r.id}">
-        <td>${engineBadge(r.engine)} ${esc(strategyLabel(r.strategy))}</td><td>${esc(effortLabel(r.effort))}</td><td>${esc(intervalLabel(r.interval_days))}</td>
+        <td>${engineBadge(r.engine)} 기준 ${esc(thresholdLabel(r.threshold))}<span class="hint">${esc(legacyTag(r.strategy))}</span></td><td>${esc(effortLabel(r.effort))}</td><td>${esc(intervalLabel(r.interval_days))}</td>
         <td>${r.status === 'running' ? `<div class="progress" title="${Math.round(r.progress * 100)}%"><div style="width:${r.progress * 100}%"></div></div>`
           : r.status === 'failed' ? `<span class="error" title="${esc(r.error)}">실패</span>` : esc(STATUS_LABEL[r.status])}</td>
         <td class="num">${signed(r.total_return)}</td><td class="num">${signed(r.excess_return)}</td>

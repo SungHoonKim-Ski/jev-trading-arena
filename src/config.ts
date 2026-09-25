@@ -117,6 +117,8 @@ export const ALL_INTERVALS: readonly IntervalOption[] = [...new Map(
 
 export const EFFORTS: readonly Effort[] = ['low', 'medium', 'high'];
 export const STRATEGIES: readonly Strategy[] = ['choice', 'probability', 'noul', 'score'];
+/** 새 실행에 쓸 수 있는 질문 방식: '오를까?'(예/아니오) + 확신 기준 */
+export const ACTIVE_STRATEGIES: readonly Strategy[] = ['noul'];
 
 export const STRATEGY_INFO: Record<Strategy, { readonly label: string; readonly description: string }> = {
   choice: { label: 'Choice 결정', description: '매수/보유/매도 중 가장 확률이 높은 선택지를 그대로 실행' },

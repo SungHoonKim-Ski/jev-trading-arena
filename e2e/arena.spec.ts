@@ -7,12 +7,9 @@ test('간단 매매: 전략 1개 선택 → 하루씩 재생 → 결과 카드 �
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Jev에게 매매를 맡겨 보세요' })).toBeVisible();
   await expect(page.getByText('Mock 엔진')).toBeVisible();
-  // 전략은 하나만 고르는 라디오: 다른 전략을 고르면 이전 선택이 풀린다
-  await expect(page.getByRole('radio', { name: /오를까/ })).toBeChecked();
-  await page.getByRole('radio', { name: /등급으로/ }).check();
-  await expect(page.getByRole('radio', { name: /등급으로/ })).toBeChecked();
-  await expect(page.getByRole('radio', { name: /오를까/ })).not.toBeChecked();
-  await expect(page.locator('input[name="strategy"]:checked')).toHaveCount(1);
+  // Jev 질문은 '오를까?' 하나: 질문 방식을 고르는 단계가 없다
+  await expect(page.locator('input[name="strategy"]')).toHaveCount(0);
+  await expect(page.getByText('오를 확률이 몇 % 이상이면 살까?')).toBeVisible();
   await page.getByRole('radio', { name: '6개월' }).check();
   // 무엇을 살지도 하나만: 개별 종목·ETF 묶음, 종목코드 입력칸 없음
   await expect(page.getByText('개별 종목')).toBeVisible();
@@ -30,8 +27,8 @@ test('간단 매매: 전략 1개 선택 → 하루씩 재생 → 결과 카드 �
 
   await expect(page).toHaveURL(/#play\/\d+/);
   await expect(page.locator('.scoreboard')).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByRole('heading', { name: /e2e_user의 “등급으로” 매매/ })).toBeVisible();
-  await expect(page.locator('.play-head .lead')).toContainText('기준 90%');
+  await expect(page.getByRole('heading', { name: /e2e_user의 매매/ })).toBeVisible();
+  await expect(page.locator('.play-head .lead')).toContainText('확신 기준 90%');
   await expect(page.locator('.play-head .lead')).toContainText('반대 확신 매도');
   // 재생 중에는 날짜가 앞으로 간다
   const first = await page.locator('#today').textContent();
@@ -74,7 +71,8 @@ test('코인: 5종 칩만 제공, 고급 설정의 여러 조합 비교는 결�
   await page.getByText('고급 설정').click();
   await expect(page.getByText('7일마다 판단')).toBeVisible();
   await page.getByLabel(/여러 조합 한 번에 비교/).check();
-  await page.locator('.compare-box input[name="strategies"][value="choice"]').check();
+  await expect(page.locator('.compare-box input[name="strategies"]')).toHaveCount(0);
+  await page.locator('.compare-box input[name="efforts"][value="high"]').check();
   await expect(page.locator('button.start')).toHaveText('▶ 2개 조합 비교');
   await page.locator('button.start').click();
   const result = page.locator('#group-result');

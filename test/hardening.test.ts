@@ -64,3 +64,12 @@ test('engine: 체결가 반영 후 수량이 크게 달라지면 최종 수량�
   assert.equal(r.trades[0]!.price, 120);
   assert.equal(r.trades[0]!.shares, 8.33);
 });
+
+test('실행 검증: 전략을 생략하면 오를까?(noul)로, 다른 질문 방식은 거부', async () => {
+  const { createRunSchema } = await import('../src/api/validation.ts');
+  const base = { nickname: 'a', market: 'US', tickers: ['AAPL'], startDate: '2025-01-01', endDate: '2025-06-30', initialCapital: 10000, engine: 'mock', efforts: ['low'], intervals: [5] };
+  const ok = createRunSchema.safeParse(base);
+  assert.equal(ok.success, true);
+  assert.deepEqual(ok.data!.strategies, ['noul']);
+  assert.equal(createRunSchema.safeParse({ ...base, strategies: ['probability'] }).success, false);
+});

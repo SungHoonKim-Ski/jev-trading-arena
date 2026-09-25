@@ -47,7 +47,7 @@ after(() => server.close());
 
 const body = (over: Record<string, unknown> = {}) => ({
   nickname: '테스터', market: 'US', tickers: ['AAPL', 'MSFT'], startDate: '2024-01-02', endDate: '2024-06-28',
-  initialCapital: 10000, engine: 'mock', strategies: ['noul', 'score'], efforts: ['low', 'high'], intervals: [5], ...over,
+  initialCapital: 10000, engine: 'mock', strategies: ['noul'], efforts: ['low', 'high'], intervals: [5, 21], ...over,
 });
 const post = (b: unknown) => fetch(`${base}/api/runs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
 
@@ -55,7 +55,8 @@ test('meta: Jev 엔진 가용 여부와 선택지 반환', async () => {
   const res = await (await fetch(`${base}/api/meta`)).json();
   assert.equal(res.success, true);
   assert.equal(res.data.jevLive, true);
-  assert.ok(res.data.strategies.probability);
+  assert.ok(res.data.strategies.probability, '이전 기록 표시용 라벨은 유지');
+  assert.deepEqual(res.data.activeStrategies, ['noul']);
   assert.equal(res.data.markets.US.intervals.length, 4);
   assert.deepEqual(res.data.markets.CRYPTO.intervals.map((i: { days: number }) => i.days), [1, 7, 14, 30]);
   assert.equal(res.data.presets.CRYPTO[0].ticker, 'BTC');
@@ -91,7 +92,7 @@ test('POST /api/runs → 조합별 실행 → 완료 → 랭킹/통계 반영', 
 });
 
 test('live 엔진: 비용 계산, 동일 요청은 캐시로 재호출 없음', async () => {
-  const b = body({ strategies: ['choice'], efforts: ['medium'], intervals: [21], nickname: 'live1', engine: 'live' });
+  const b = body({ efforts: ['medium'], intervals: [21], nickname: 'live1', engine: 'live' });
   const first = (await (await post(b)).json()).data;
   await app.queue.onIdle();
   const callsAfterFirst = liveCalls;
@@ -118,12 +119,13 @@ test('입력 검증 오류는 400과 한국어 메시지', async () => {
     [{ market: 'KR', tickers: ['AAPL'] }, /6자리/],
     [{ startDate: '2024-06-01', endDate: '2024-06-10' }, /최소/],
     [{ endDate: '2999-01-01' }, /오늘/],
-    [{ strategies: [] }, /전략/],
+    [{ strategies: [] }, /오를까/],
+    [{ strategies: ['score'] }, /오를까/],
+    [{ strategies: ['choice'] }, /오를까/],
     [{ intervals: [3] }, /매매 주기/],
     [{ threshold: 0.6 }, /임계값/],
     [{ exitRule: 'panic' }, /exitRule|Invalid/],
     [{ nickname: '<script>' }, /닉네임/],
-    [{ strategies: ['choice', 'probability', 'noul', 'score'], efforts: ['low', 'medium', 'high'], intervals: [1, 5, 10] }, /최대/],
   ];
   for (const [over, re] of cases) {
     const res = await post(body(over));

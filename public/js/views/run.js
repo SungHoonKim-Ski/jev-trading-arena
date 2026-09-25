@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { esc, meta, STRATEGY_FRIENDLY } from '../format.js';
+import { esc, meta } from '../format.js';
 import { pollGroup } from './runResults.js';
 
 const NICK_KEY = 'jev-arena-nickname';
@@ -12,7 +12,6 @@ const state = {
   // 시장별로 고른 종목 하나 (단일 선택)
   ticker: { KR: '005930', US: 'AAPL', CRYPTO: 'BTC' },
   months: 12,
-  strategy: 'noul',
   threshold: null, // null이면 서버 기본값
 };
 
@@ -49,7 +48,7 @@ function advancedTemplate(m, market) {
   const isCrypto = state.market === 'CRYPTO';
   return `
   <details class="advanced">
-    <summary>고급 설정 <span class="hint">기간 직접 입력 · 자본 · effort · 매매 주기 · 체결 · 여러 조합 비교</span></summary>
+    <summary>고급 설정 <span class="hint">기간 직접 입력 · 자본 · 매도 규칙 · effort · 매매 주기 · 체결 · 여러 조합 비교</span></summary>
     <div class="grid-2">
       <div class="field"><b>기간 직접 입력</b>
         <div class="row"><input type="date" name="startDate" value="${monthsAgo(state.months)}" max="${yesterday()}" /> ~ <input type="date" name="endDate" value="${yesterday()}" max="${yesterday()}" /></div></div>
@@ -68,9 +67,8 @@ function advancedTemplate(m, market) {
     <div class="checks">${radios('effort', Object.entries(m.efforts).map(([k, v]) => [k, v.label, v.description]), EFFORT_DEFAULT)}</div>
     <h3>매매 주기</h3>
     <div class="checks">${radios('interval', intervals.map((i) => [String(i.days), i.label, isCrypto ? `${i.days}일마다 판단` : `${i.days}거래일마다 판단`]), String(intervals[1].days))}</div>
-    <label class="compare-toggle"><input type="checkbox" name="compare" /> <b>여러 조합 한 번에 비교</b> <span class="hint">선택한 전략·effort·주기의 모든 조합을 실행하고 결과 표로 봅니다</span></label>
+    <label class="compare-toggle"><input type="checkbox" name="compare" /> <b>여러 조합 한 번에 비교</b> <span class="hint">선택한 effort·매매 주기의 모든 조합을 실행하고 결과 표로 봅니다</span></label>
     <div class="compare-box" hidden>
-      <div class="checks">${checks('strategies', Object.keys(m.strategies).map((k) => [k, STRATEGY_FRIENDLY[k]]), [state.strategy])}</div>
       <div class="checks">${checks('efforts', Object.entries(m.efforts).map(([k, v]) => [k, v.label]), [EFFORT_DEFAULT])}</div>
       <div class="checks">${checks('intervals', intervals.map((i) => [String(i.days), i.label]), [String(intervals[1].days)])}</div>
       <span id="combo-count" class="hint"></span>
@@ -82,7 +80,7 @@ function template(m) {
   const market = m.markets[state.market];
   return `
   <div class="hero"><h2>Jev에게 매매를 맡겨 보세요</h2>
-    <p class="lead">종목과 기간, Jev에게 묻는 방식만 고르면 됩니다. 매수·매도가 하루씩 재생되고 랭킹에 기록됩니다.</p></div>
+    <p class="lead">종목과 기간, 그리고 얼마나 확실할 때 살지만 고르면 됩니다. 매수·매도가 하루씩 재생되고 랭킹에 기록됩니다.</p></div>
   ${m.jevLive ? '' : '<div class="notice" style="margin-bottom:16px">지금은 API 키가 없어 <b>Mock 엔진</b>으로 매매합니다. Jev와 같은 질문을 받아 규칙으로 답하는 대체 엔진이며, 실제 Jev 결과와 랭킹이 분리됩니다.</div>'}
   <form id="run-form" class="card simple-form" novalidate>
     <fieldset class="step"><legend class="step-label">1. 어떤 시장?</legend>
@@ -92,10 +90,8 @@ function template(m) {
       ${assetGroups(m)}</fieldset>
     <fieldset class="step"><legend class="step-label">3. 언제부터? <span class="hint">어제까지</span></legend>
       <div class="chips">${PERIODS.map(([mo, l]) => `<label class="chip big choice"><input type="radio" name="months" value="${mo}" ${mo === state.months ? 'checked' : ''} /><span class="dot" aria-hidden="true"></span>${l}</label>`).join('')}</div></fieldset>
-    <fieldset class="step"><legend class="step-label">4. Jev에게 어떻게 물을까? <span class="hint">하나를 고르세요</span></legend>
-      <div class="strategy-cards">${Object.entries(m.strategies).map(([k, v]) => `<label class="strategy-card choice"><input type="radio" name="strategy" value="${k}" ${k === state.strategy ? 'checked' : ''} />
-        <span class="dot" aria-hidden="true"></span><b>${esc(STRATEGY_FRIENDLY[k])}</b><span class="desc">${esc(v.description)}</span></label>`).join('')}</div></fieldset>
-    <fieldset class="step"><legend class="step-label">5. 얼마나 확실할 때 움직일까? <span class="hint">Jev가 이 확률 이상일 때만 사고팝니다. 높을수록 거래가 드물어요</span></legend>
+    <fieldset class="step"><legend class="step-label">4. Jev에게 "오를까?"를 물어서, 오를 확률이 몇 % 이상이면 살까?</legend>
+      <p class="hint step-hint">내릴 확률이 같은 기준 이상이면 팝니다. 기준이 높을수록 거래가 드물어요.</p>
       <div class="chips">${m.thresholds.map((t) => `<label class="chip big choice"><input type="radio" name="threshold" value="${t}" ${t === (state.threshold ?? m.defaultThreshold) ? 'checked' : ''} /><span class="dot" aria-hidden="true"></span>${Math.round(t * 100)}%</label>`).join('')}</div></fieldset>
     <div class="start-bar">
       <label class="nick">닉네임 <input type="text" name="nickname" maxlength="20" required value="${esc(readNick())}" placeholder="랭킹에 표시될 이름" /></label>
@@ -129,7 +125,7 @@ function formValues(form) {
     initialCapital: Number(fd.get('initialCapital')),
     engine: form.querySelector('[data-engine][aria-pressed="true"]')?.dataset.engine ?? 'mock',
     execution: form.querySelector('[data-execution][aria-pressed="true"]')?.dataset.execution ?? 'open',
-    strategies: compare ? all('strategies') : [String(fd.get('strategy') ?? state.strategy)],
+    strategies: ['noul'], // Jev 질문은 '오를까?'(예/아니오) 하나
     efforts: compare ? all('efforts') : [String(fd.get('effort') ?? EFFORT_DEFAULT)],
     intervals: (compare ? all('intervals') : [String(fd.get('interval'))]).map(Number),
     threshold: Number(fd.get('threshold')),
@@ -140,7 +136,7 @@ function formValues(form) {
 
 function updateCount(form) {
   const v = formValues(form);
-  const n = v.strategies.length * v.efforts.length * v.intervals.length;
+  const n = v.efforts.length * v.intervals.length;
   const max = meta().maxRunsPerRequest;
   form.querySelector('#combo-count').textContent = `${n}개 조합 실행${n > max ? ` (최대 ${max}개)` : ''}`;
   form.querySelector('.start').textContent = v.compare ? `▶ ${n}개 조합 비교` : '▶ 매매 시작';
@@ -153,7 +149,6 @@ function pressOne(root, selector, target) {
 function bindChoices(root, m, form, onOpenRun) {
   // 시장·기간·전략은 하나만 고르는 라디오 버튼
   form.querySelectorAll('input[name="market"]').forEach((r) => r.addEventListener('change', () => { state.market = r.value; render(root, onOpenRun); }));
-  form.querySelectorAll('input[name="strategy"]').forEach((r) => r.addEventListener('change', () => { state.strategy = r.value; }));
   form.querySelectorAll('input[name="threshold"]').forEach((r) => r.addEventListener('change', () => { state.threshold = Number(r.value); }));
   form.querySelectorAll('input[name="months"]').forEach((r) => r.addEventListener('change', () => {
     state.months = Number(r.value);

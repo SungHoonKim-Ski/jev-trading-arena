@@ -29,6 +29,8 @@ export const STRATEGY_FRIENDLY = { choice: '단호하게', probability: '확률�
 export const strategyFriendly = (s) => STRATEGY_FRIENDLY[s] ?? s;
 /** 확신 임계값 표시 (도입 전 실행은 '이전 규칙') */
 export const thresholdLabel = (t) => (t == null ? '이전 규칙' : `${Math.round(Number(t) * 100)}%`);
+/** 3지선다·5단계 등 이전 질문 방식으로 한 실행 표시 */
+export const legacyTag = (strategy) => (strategy && strategy !== 'noul' ? ` · 이전 방식(${STRATEGY_FRIENDLY[strategy] ?? strategy})` : '');
 export const exitRuleLabel = (r) => META?.exitRules?.[r]?.label ?? (r ? r : '');
 export const effortLabel = (e) => META?.efforts[e]?.label ?? e;
 export const intervalLabel = (d) => META?.intervals.find((i) => i.days === Number(d))?.label ?? `${d}일`;
