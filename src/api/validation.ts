@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { DEFAULT_THRESHOLD, EFFORTS, MARKETS, STRATEGIES, THRESHOLDS } from '../config.ts';
+import { ACTIVE_STRATEGIES, DEFAULT_THRESHOLD, EFFORTS, MARKETS, STRATEGIES, THRESHOLDS } from '../config.ts';
 import { CRYPTO_ASSETS } from '../market/binance.ts';
 import { SORT_COLUMNS } from '../db/runRepository.ts';
 
@@ -33,7 +33,9 @@ export const createRunSchema = z.object({
   execution: z.enum(['open', 'vwap', 'tick']).default('open'),
   threshold: z.number().refine((t) => THRESHOLDS.includes(t), `임계값은 ${THRESHOLDS.map((t) => `${t * 100}%`).join(', ')} 중 하나여야 합니다`).default(DEFAULT_THRESHOLD),
   exitRule: z.enum(['opposite', 'drop']).default('opposite'),
-  strategies: z.array(z.enum(STRATEGIES as [string, ...string[]])).min(1, '전략을 1개 이상 선택하세요'),
+  // 새 실행은 '오를까?'(예/아니오) 질문만 지원. 3지선다·5단계는 이전 기록 조회용으로만 남아 있다
+  strategies: z.array(z.enum(ACTIVE_STRATEGIES as [string, ...string[]], { errorMap: () => ({ message: "Jev 질문은 '오를까?'(예/아니오)만 지원합니다" }) }))
+    .min(1, "Jev 질문은 '오를까?'(예/아니오)만 지원합니다").default(['noul']),
   efforts: z.array(z.enum(EFFORTS as [string, ...string[]])).min(1, 'effort를 1개 이상 선택하세요'),
   intervals: z.array(z.number().int()).min(1, '매매 주기를 1개 이상 선택하세요'),
 }).superRefine((v, ctx) => {

@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { esc, meta, pct, signed, num, money, usd, strategyLabel, effortLabel, intervalLabel, marketLabel, engineBadge, tickersText, STATUS_LABEL, ACTION_LABEL, thresholdLabel, exitRuleLabel } from '../format.js';
+import { esc, meta, pct, signed, num, money, usd, effortLabel, intervalLabel, marketLabel, engineBadge, tickersText, STATUS_LABEL, ACTION_LABEL, thresholdLabel, exitRuleLabel, legacyTag } from '../format.js';
 import { lineChart } from '../charts.js';
 
 const DECISION_ROWS = 200;
@@ -60,9 +60,9 @@ export async function render(root, runId, { onBack }) {
   const currency = meta().markets[run.market].currency;
   const names = run.symbol_names ?? {};
   const header = `<a href="#" class="back">← 돌아가기</a>
-    <h2>${engineBadge(run.engine)} ${esc(run.nickname)}의 ${esc(strategyLabel(run.strategy))} 전략</h2>
+    <h2>${engineBadge(run.engine)} ${esc(run.nickname)}의 매매 기록</h2>
     <p class="lead">${esc(marketLabel(run.market))} · ${esc(tickersText(run))} · ${esc(run.start_date)} ~ ${esc(run.end_date)} ·
-      effort ${esc(effortLabel(run.effort))} · ${esc(intervalLabel(run.interval_days))} 판단 · 기준 ${esc(thresholdLabel(run.threshold))}${run.exit_rule ? `(${esc(exitRuleLabel(run.exit_rule))})` : ''} · ${EXECUTION_LABEL[run.execution] ?? '시가 체결'} · 초기 자본 ${esc(money(run.initial_capital, currency))}${run.model ? ` · 모델 ${esc(run.model)}` : ''}</p>`;
+      effort ${esc(effortLabel(run.effort))} · ${esc(intervalLabel(run.interval_days))} 판단 · 확신 기준 ${esc(thresholdLabel(run.threshold))}${esc(legacyTag(run.strategy))}${run.exit_rule ? `(${esc(exitRuleLabel(run.exit_rule))})` : ''} · ${EXECUTION_LABEL[run.execution] ?? '시가 체결'} · 초기 자본 ${esc(money(run.initial_capital, currency))}${run.model ? ` · 모델 ${esc(run.model)}` : ''}</p>`;
 
   if (run.status !== 'done') {
     root.innerHTML = `${header}<div class="card">상태: <b>${esc(STATUS_LABEL[run.status])}</b>${run.error ? `<p class="error">${esc(run.error)}</p>` : ''}

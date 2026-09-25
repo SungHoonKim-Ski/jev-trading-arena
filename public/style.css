@@ -290,3 +290,5 @@ label.chip.choice:has(input:checked) .dot { border-color: var(--accent-ink); bac
 
 .asset-group + .asset-group { margin-top: 10px; }
 .group-label { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+
+.step-hint { margin: -2px 0 8px; }
