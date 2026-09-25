@@ -59,7 +59,7 @@ GitHub Pages (정적 화면)  ──API 호출(CORS)──▶  Vercel 서버리�
                                               └ 일일 크론: 분봉 수집 + 멈춘 실행 복구
 ```
 
-- **Vercel**: `npm run build:vercel`이 Build Output API 산출물(화면 + API 함수 + 크론)을 만듭니다. 백테스트는 응답 후 `waitUntil`로 끝까지 실행합니다. 함수가 시간 초과로 끊긴 실행은 크론이 다시 돌립니다.
+- **Vercel**: `npm run build:vercel`이 Build Output API 산출물(화면 + API 함수 + 크론)을 만듭니다. 바이낸스 API가 미국 IP를 막기 때문에 함수는 서울(icn1) 리전에서 실행합니다. 원본 틱 저장소는 로컬 전용이라 배포 환경에서는 틱 체결이 꺼집니다. 백테스트는 응답 후 `waitUntil`로 끝까지 실행합니다. 함수가 시간 초과로 끊긴 실행은 크론이 다시 돌립니다.
 - **GitHub Pages**: `main`에 `public/`이 바뀌면 워크플로가 배포합니다. 저장소 변수 `API_BASE_URL`에 Vercel 주소를 넣으면 화면이 그 API를 씁니다.
 - **DB**: 로컬은 SQLite 파일, 배포는 Turso를 씁니다. SQL과 코드는 같습니다(`@libsql/client`).
 
@@ -110,17 +110,39 @@ gh variable set API_BASE_URL --body "https://<vercel-주소>"   # Pages 화면�
 |---|---|---|---|---|---|---|
 | 한국 | `005930` | 평일 | 252일 | 1주 | 0.015% / 0.215%(거래세 포함) | KOSPI |
 | 미국 | `AAPL` | 평일 | 252일 | 1주 | 0% / 0% | S&P 500 |
-| 코인 | `BTC`, `SOL-USD` | 매일(UTC 0시 기준) | 365일 | 0.00000001개 | 0.1% / 0.1% | 비트코인 |
+| 코인 | `BTC`, `ETH`, `SOL`, `XRP`, `BNB` | 매일(UTC 0시 기준) | 365일 | 0.00000001개 | 0.1% / 0.1% | 비트코인 |
 
-코인은 Jev에게 "this cryptocurrency", "the next 7 days"처럼 코인에 맞는 문구로 묻습니다.
+코인은 바이낸스 USDT 마켓의 대표 5종만 제공합니다(1 USDT ≈ 1 USD로 표시). Jev에게는 "this cryptocurrency", "the next 7 days"처럼 코인에 맞는 문구로 묻습니다.
 
-**체결 방식**은 두 가지입니다. 시가 체결은 다음 거래일 시가에 체결합니다. VWAP 체결은 다음 거래일 분봉의 거래량가중평균가에 체결합니다.
+**체결 방식**은 세 가지입니다.
+
+| 방식 | 대상 | 체결가 |
+|---|---|---|
+| 시가 | 전체 | 다음 거래일 시가 |
+| 분봉 VWAP | 전체 | 다음 거래일 분봉의 거래량가중평균가 (주식은 수집된 분봉, 코인은 바이낸스 1분봉) |
+| 원본 틱 | 코인, 로컬 서버 | 다음 날 0시부터 실제 체결을 순서대로 따라가며, 시장 체결량의 10%(`TICK_PARTICIPATION`)만 내 주문이 가져간다고 보고 계산 |
+
+틱이 없으면 1분봉, 1분봉도 없으면 일봉 평균가로 대체하고, 결과에 출처별 체결 건수를 남깁니다.
 
 ## 데이터
 
 - **일봉**: Yahoo Finance 수정주가. 요청 구간이 DB에 있으면 재사용합니다.
 - **분봉**: 무료 소스는 과거 틱 데이터를 제공하지 않습니다. Yahoo 분봉도 1분봉 30일, 5분봉 60일, 60분봉 730일까지만 줍니다. 그래서 서버가 주기적으로 받아 DB에 계속 누적합니다. 서비스를 오래 켜 둘수록 1분봉 기간이 길어집니다.
-- **DB 용량**: 코인은 24시간 거래라 1분봉이 하루 1,440개씩 쌓입니다. 주식보다 약 4배 빨리 늘어나므로 Turso 용량을 확인하세요.
+- **코인 시세**: 일봉과 1분봉은 바이낸스 API에서 받습니다. 1분봉은 상장 이후 전체 이력이 있어서, 체결일마다 그날 치만 받아 DB에 저장합니다.
+- **코인 원본 틱**: 바이낸스 공개 데이터(data.binance.vision)의 일별 체결 파일을 SHA-256 체크섬으로 검증한 뒤 로컬 DuckDB(`data/ticks.duckdb`)에 저장합니다. 하루 비트코인 약 330만 건(약 37MB), 5종 합계 약 120MB입니다. 서버가 매일 전날 치를 자동 수집하고, 틱 체결 백테스트는 필요한 날을 자동으로 받습니다. `TICK_STORE_MAX_GB`(기본 10GB)를 넘으면 수집을 멈추고 1분봉 체결로 대체합니다.
+
+```bash
+npm run ticks -- ALL 2026-09-01 2026-09-23   # 5종 전체
+npm run ticks -- BTC,ETH 2026-09-20          # 하루치
+```
+
+| 틱 관련 환경 변수 | 기본값 | 설명 |
+|---|---|---|
+| `TICKS` | 켜짐 | `off`면 원본 틱 저장소와 틱 체결 비활성 |
+| `TICK_STORE_PATH` | `data/ticks.duckdb` | |
+| `TICK_STORE_MAX_GB` | `10` | 틱 저장소 용량 상한 |
+| `TICK_PARTICIPATION` | `0.1` | 틱 체결 시 시장 체결량 대비 내 주문 비율 |
+| `TICK_DAILY_COLLECT` | 켜짐 | `off`면 매일 전날 틱 자동 수집 중지 |
 - **VWAP 환산**: 분봉은 원주가이고 일봉은 수정주가입니다. 그래서 수정 시가 × (분봉 VWAP ÷ 첫 분봉 시가)로 환산합니다. 분봉이 없는 날은 일봉 (시가+고가+저가+종가)/4로 대체하고, 대체 횟수를 결과에 표시합니다.
 - **수동 수집**: 화면의 "데이터" 탭을 쓰거나 아래 명령을 실행합니다. cron에 등록해 두면 좋습니다.
 
@@ -128,7 +150,6 @@ gh variable set API_BASE_URL --body "https://<vercel-주소>"   # Pages 화면�
 npm run collect                       # 추적 중인 모든 종목
 npm run collect -- KR 005930 000660
 npm run collect -- US AAPL NVDA
-npm run collect -- CRYPTO BTC ETH
 ```
 
 ## 구조
@@ -141,6 +162,7 @@ src/
   db/         libSQL 스키마·마이그레이션, 로컬/원격 연결, 저장소(시세·분봉·실행·Jev 캐시)
   api/        라우터, zod 입력 검증, 레이트리밋, CORS, 정적 파일
   vercel/     서버리스 진입점 (Turso 연결, waitUntil)
+  ticks/      코인 원본 틱 저장소 (DuckDB), 바이낸스 틱 파일 다운로더
 public/       바닐라 JS 화면 (실행, 랭킹, 전략 분석, 내 기록, 데이터, 상세)
 test/         단위·통합 테스트 (node:test)
 e2e/          Playwright E2E (가짜 시세 서버 사용)
@@ -165,7 +187,7 @@ e2e/          Playwright E2E (가짜 시세 서버 사용)
 ## 테스트
 
 ```bash
-npm test          # 단위 + 통합 (69개)
+npm test          # 단위 + 통합 (85개)
 npm run coverage  # 라인 커버리지 약 98%
 npm run e2e       # Playwright (최초 1회 npx playwright install chromium)
 npm run typecheck

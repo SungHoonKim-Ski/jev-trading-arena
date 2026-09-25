@@ -15,7 +15,7 @@ function artifacts(totalReturn: number, bench = 0.1): RunArtifacts {
     trades: [{ date: '2024-01-03', symbol: 'AAPL', side: 'buy', shares: 1, price: 100, fee: 0 }],
     decisions: [{ date: '2024-01-02', symbol: 'AAPL', action: 'buy', targetWeight: 1, confidence: 0.5, signal: 0.7 }],
     metrics: { totalReturn, cagr: totalReturn, mdd: -0.1, sharpe: 1, volatility: 0.2, trades: 1, fees: 0, finalEquity: 10000 * (1 + totalReturn) },
-    summary: { totalReturn, benchmarkReturn: bench, indexReturn: 0.05, jevCalls: 10, jevInputTokens: 1000, jevCostUsd: 0.00004, model: 'jev-mock', intradayFills: null, fallbackFills: null },
+    summary: { totalReturn, benchmarkReturn: bench, indexReturn: 0.05, jevCalls: 10, jevInputTokens: 1000, jevCostUsd: 0.00004, model: 'jev-mock', tickFills: null, intradayFills: null, fallbackFills: null },
   };
 }
 

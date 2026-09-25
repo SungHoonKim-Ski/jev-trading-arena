@@ -26,6 +26,16 @@ export const CONFIG = {
   /** 분봉 주기 수집 간격 (Yahoo 1분봉은 30일만 보관되므로 최소 하루 1회 이상) */
   intradayCollectEveryMs: Number(process.env.INTRADAY_COLLECT_EVERY_MS ?? 6 * 3600_000),
   intradayCollectEnabled: process.env.INTRADAY_COLLECT !== 'off',
+  ticks: {
+    /** 원본 틱 저장소 (로컬 전용). 'off'면 틱 체결 비활성 */
+    enabled: process.env.TICKS !== 'off',
+    path: process.env.TICK_STORE_PATH ?? path.join(root, 'data', 'ticks.duckdb'),
+    maxBytes: Number(process.env.TICK_STORE_MAX_GB ?? 10) * 1e9,
+    /** 내 주문이 시장 체결량에서 차지하는 비율 (틱 체결 시뮬레이션) */
+    participation: Number(process.env.TICK_PARTICIPATION ?? 0.1),
+    /** 매일 전날 5개 코인의 원본 틱을 자동 수집 */
+    dailyCollect: process.env.TICK_DAILY_COLLECT !== 'off',
+  },
   maxRunsPerRequest: 24,
   rateLimit: { windowMs: 60_000, maxCreates: 20 },
 } as const;
@@ -71,8 +81,9 @@ export const MARKETS: Record<Market, MarketConfig> = {
     periodsPerYear: 252, lotSize: 1, intervals: STOCK_INTERVALS, assetNoun: 'stock', dayUnit: 'trading days',
   },
   CRYPTO: {
-    label: '코인', currency: 'USD', indexSymbol: 'BTC-USD', indexName: '비트코인',
-    // 주요 거래소 일반 등급 기준 매수·매도 각 0.1%
+    // 바이낸스 USDT 마켓 기준 (1 USDT ≈ 1 USD로 표시)
+    label: '코인', currency: 'USD', indexSymbol: 'BTCUSDT', indexName: '비트코인',
+    // 바이낸스 일반 등급 기준 매수·매도 각 0.1%
     buyFeeRate: 0.001, sellFeeRate: 0.001, defaultCapital: 10_000,
     periodsPerYear: 365, lotSize: 1e-8, intervals: CRYPTO_INTERVALS, assetNoun: 'cryptocurrency', dayUnit: 'days',
   },

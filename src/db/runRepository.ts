@@ -9,6 +9,7 @@ export interface RunSummary {
   readonly jevInputTokens: number;
   readonly jevCostUsd: number;
   readonly model: string;
+  readonly tickFills: number | null;
   readonly intradayFills: number | null;
   readonly fallbackFills: number | null;
 }
@@ -41,7 +42,7 @@ type Row = Record<string, unknown>;
 const RUN_COLUMNS = `id, group_id, nickname, market, tickers, symbol_names, start_date, end_date, interval_days, effort,
   strategy, engine, model, initial_capital, status, progress, error, created_at, finished_at, total_return, cagr, mdd,
   sharpe, volatility, trades, fees, final_equity, benchmark_return, index_return, excess_return, jev_calls,
-  jev_input_tokens, jev_cost_usd, execution, intraday_fills, fallback_fills, started_at`;
+  jev_input_tokens, jev_cost_usd, execution, intraday_fills, fallback_fills, tick_fills, started_at`;
 
 function toRun(row: Row): Row {
   return {
@@ -129,10 +130,10 @@ export class RunRepository {
         sql: `UPDATE runs SET status = 'done', progress = 1, error = NULL, finished_at = ?, model = ?,
           total_return = ?, cagr = ?, mdd = ?, sharpe = ?, volatility = ?, trades = ?, fees = ?, final_equity = ?,
           benchmark_return = ?, index_return = ?, excess_return = ?, jev_calls = ?, jev_input_tokens = ?, jev_cost_usd = ?,
-          intraday_fills = ?, fallback_fills = ? WHERE id = ?`,
+          intraday_fills = ?, fallback_fills = ?, tick_fills = ? WHERE id = ?`,
         args: [new Date().toISOString(), s.model, m.totalReturn, m.cagr, m.mdd, m.sharpe, m.volatility, m.trades,
           m.fees, m.finalEquity, s.benchmarkReturn, s.indexReturn, m.totalReturn - s.benchmarkReturn, s.jevCalls,
-          s.jevInputTokens, s.jevCostUsd, s.intradayFills, s.fallbackFills, id],
+          s.jevInputTokens, s.jevCostUsd, s.intradayFills, s.fallbackFills, s.tickFills, id],
       },
     ]);
   }

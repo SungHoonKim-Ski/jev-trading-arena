@@ -28,6 +28,8 @@ await writeFile(`${FUNC}/.vc-config.json`, JSON.stringify({
   shouldAddHelpers: false,
   supportsResponseStreaming: true,
   maxDuration: 300,
+  // 바이낸스 API는 미국 IP를 차단하므로 서울 리전에서 실행
+  regions: ['icn1'],
 }, null, 2));
 
 await cp('public', `${OUT}/static`, { recursive: true });

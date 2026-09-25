@@ -49,9 +49,11 @@ test('코인 시장: 코인 프리셋·7일 주기로 실행하고 소수점 수
   await page.getByRole('button', { name: /코인/ }).click();
   await expect(page.getByRole('button', { name: /비트코인/ })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByText('7일마다 UTC 0시 종가로 판단')).toBeVisible();
-  await page.locator('#ticker-input').fill('sol');
-  await page.getByRole('button', { name: '추가', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'SOL-USD' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#preset-chips .chip')).toHaveCount(5);
+  await expect(page.locator('#ticker-input')).toHaveCount(0);
+  await page.getByRole('button', { name: /솔라나/ }).click();
+  await expect(page.getByRole('button', { name: /솔라나/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: '원본 틱 체결' })).toHaveCount(0); // 틱 저장소 없는 서버
   await page.getByRole('button', { name: /최근 1년/ }).click();
   await page.getByRole('button', { name: '실행', exact: true }).click();
   const result = page.locator('#group-result');

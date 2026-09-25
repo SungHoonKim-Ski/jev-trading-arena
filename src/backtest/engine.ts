@@ -13,6 +13,8 @@ export interface DecideContext {
 /** 종목별 목표 비중(0~1) 또는 null(유지) */
 export type DecideFn = (ctx: DecideContext) => Promise<Readonly<Record<string, number | null>>>;
 
+export type FillPriceFn = (symbol: string, date: string, side: 'buy' | 'sell', quantity: number) => number | null | Promise<number | null>;
+
 export interface SimulationInput {
   readonly symbols: readonly string[];
   readonly bars: Readonly<Record<string, readonly Bar[]>>;
@@ -23,8 +25,11 @@ export interface SimulationInput {
   readonly buyFeeRate: number;
   readonly sellFeeRate: number;
   readonly decide: DecideFn;
-  /** 체결가 결정 함수. null을 반환하면 해당 일 시가로 체결 */
-  readonly fillPrice?: (symbol: string, date: string) => number | null;
+  /**
+   * 체결가 결정 함수 (분봉 VWAP, 틱 체결 등). quantity는 시가 기준 예상 수량.
+   * null을 반환하면 해당 일 시가로 체결
+   */
+  readonly fillPrice?: FillPriceFn;
   /** 최소 매매 단위 (기본 1주, 코인은 0.00000001개) */
   readonly lotSize?: number;
 }
@@ -93,14 +98,18 @@ function roundLots(quantity: number, lot: number): number {
   return lot >= 1 ? lots * lot : Number((lots * lot).toFixed(12));
 }
 
-function execute(input: SimulationInput, p: Portfolio, orders: readonly Order[], date: string): { portfolio: Portfolio; trades: Trade[] } {
+async function execute(input: SimulationInput, p: Portfolio, orders: readonly Order[], date: string): Promise<{ portfolio: Portfolio; trades: Trade[] }> {
   const lot = input.lotSize ?? 1;
   const slot = portfolioValue(input, p, date, 'open') / input.symbols.length;
-  const plans = orders.map((o) => {
-    const price = input.fillPrice?.(o.symbol, date) ?? markPrice(input, o.symbol, date, 'open')!;
+  const plans = await Promise.all(orders.map(async (o) => {
+    const open = markPrice(input, o.symbol, date, 'open')!;
     const held = p.shares[o.symbol] ?? 0;
+    // 시가로 예상 수량을 잡고 체결가를 구한 뒤, 그 가격으로 최종 수량을 다시 계산
+    const estimate = roundLots((slot * o.target) / open, lot) - held;
+    const custom = estimate === 0 ? null : await input.fillPrice?.(o.symbol, date, estimate > 0 ? 'buy' : 'sell', Math.abs(estimate));
+    const price = custom ?? open;
     return { ...o, price, held, delta: roundLots((slot * o.target) / price, lot) - held };
-  });
+  }));
   const trades: Trade[] = [];
   let cash = p.cash;
   let shares = { ...p.shares };
@@ -165,7 +174,7 @@ export async function simulate(input: SimulationInput): Promise<SimulationResult
     const date = calendar[d]!;
     const ready = Object.entries(pending).filter(([s]) => market.indexOf[s]!.has(date));
     if (ready.length > 0) {
-      const result = execute(input, portfolio, ready.map(([symbol, target]) => ({ symbol, target })), date);
+      const result = await execute(input, portfolio, ready.map(([symbol, target]) => ({ symbol, target })), date);
       portfolio = result.portfolio;
       trades.push(...result.trades);
       pending = Object.fromEntries(Object.entries(pending).filter(([s]) => !market.indexOf[s]!.has(date)));

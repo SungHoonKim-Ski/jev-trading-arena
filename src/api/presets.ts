@@ -1,3 +1,4 @@
+import { CRYPTO_ASSETS } from '../market/binance.ts';
 import type { Market } from '../types.ts';
 
 export const TICKER_PRESETS: Record<Market, readonly { readonly ticker: string; readonly name: string }[]> = {
@@ -13,10 +14,6 @@ export const TICKER_PRESETS: Record<Market, readonly { readonly ticker: string; 
     { ticker: 'GOOGL', name: 'Alphabet' }, { ticker: 'TSLA', name: 'Tesla' },
     { ticker: 'META', name: 'Meta' }, { ticker: 'SPY', name: 'S&P 500 ETF' },
   ],
-  CRYPTO: [
-    { ticker: 'BTC-USD', name: '비트코인' }, { ticker: 'ETH-USD', name: '이더리움' },
-    { ticker: 'SOL-USD', name: '솔라나' }, { ticker: 'XRP-USD', name: '리플' },
-    { ticker: 'BNB-USD', name: 'BNB' }, { ticker: 'DOGE-USD', name: '도지코인' },
-    { ticker: 'ADA-USD', name: '에이다' }, { ticker: 'AVAX-USD', name: '아발란체' },
-  ],
+  // 코인은 바이낸스 USDT 마켓 대표 5종만 제공
+  CRYPTO: CRYPTO_ASSETS.map((a) => ({ ticker: a.ticker, name: a.name })),
 };

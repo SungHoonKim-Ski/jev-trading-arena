@@ -1,8 +1,13 @@
 import type { Bar, Market } from '../types.ts';
 import type { PriceRepository } from '../db/priceRepository.ts';
 import { candidateSymbols, fetchDailyBars, type ChartResult } from './yahoo.ts';
+import { fetchBinanceDaily } from './binance.ts';
 
 export type BarFetcher = (market: Market, input: string, from: string, to: string) => Promise<ChartResult>;
+
+/** 시장별 일봉 소스: 주식은 Yahoo, 코인은 바이낸스 */
+export const defaultBarFetcher: BarFetcher = (market, input, from, to) =>
+  market === 'CRYPTO' ? fetchBinanceDaily(input, from, to) : fetchDailyBars(market, input, from, to);
 
 export interface SymbolBars {
   readonly symbol: string;
@@ -21,7 +26,7 @@ export class PriceService {
   readonly #fetcher: BarFetcher;
   readonly #now: () => Date;
 
-  constructor(repo: PriceRepository, fetcher: BarFetcher = fetchDailyBars, now: () => Date = () => new Date()) {
+  constructor(repo: PriceRepository, fetcher: BarFetcher = defaultBarFetcher, now: () => Date = () => new Date()) {
     this.#repo = repo;
     this.#fetcher = fetcher;
     this.#now = now;

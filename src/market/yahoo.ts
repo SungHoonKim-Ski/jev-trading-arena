@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { Bar, Market } from '../types.ts';
+import { resolveCryptoSymbol } from './binance.ts';
 
 export class SymbolNotFoundError extends Error {
   constructor(symbol: string) {
@@ -70,8 +71,11 @@ export function parseChart(json: unknown): ChartResult {
 export function candidateSymbols(market: Market, input: string): string[] {
   const t = input.trim().toUpperCase();
   if (market === 'KR' && /^\d{6}$/.test(t)) return [`${t}.KS`, `${t}.KQ`];
-  // 코인은 달러 마켓 기준: BTC → BTC-USD
-  if (market === 'CRYPTO' && !t.includes('-')) return [`${t}-USD`];
+  // 코인은 바이낸스 USDT 마켓 5종: BTC / BTC-USD / BTCUSDT → BTCUSDT
+  if (market === 'CRYPTO') {
+    const symbol = resolveCryptoSymbol(t);
+    return symbol ? [symbol] : [];
+  }
   return [t];
 }
 

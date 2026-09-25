@@ -15,11 +15,14 @@
     "typecheck": "tsc --noEmit",
     "collect": "node src/cli/collect.ts",
     "e2e": "playwright test",
-    "build:vercel": "node scripts/build-vercel.mjs"
+    "build:vercel": "node scripts/build-vercel.mjs",
+    "ticks": "node src/cli/ticks.ts"
   },
   "dependencies": {
+    "@duckdb/node-api": "^1.5.5-r.5",
     "@libsql/client": "^0.18.0",
     "@vercel/functions": "^3.9.9",
+    "fflate": "^0.8.3",
     "zod": "^3.25.76"
   },
   "devDependencies": {

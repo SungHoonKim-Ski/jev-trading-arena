@@ -97,6 +97,7 @@ const COLUMN_MIGRATIONS: readonly [table: string, column: string, ddl: string][]
   ['runs', 'intraday_fills', 'ALTER TABLE runs ADD COLUMN intraday_fills INTEGER'],
   ['runs', 'fallback_fills', 'ALTER TABLE runs ADD COLUMN fallback_fills INTEGER'],
   ['runs', 'started_at', 'ALTER TABLE runs ADD COLUMN started_at TEXT'],
+  ['runs', 'tick_fills', 'ALTER TABLE runs ADD COLUMN tick_fills INTEGER'],
 ];
 
 async function migrate(db: Db): Promise<void> {
