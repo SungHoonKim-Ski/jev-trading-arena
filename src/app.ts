@@ -26,6 +26,7 @@ export interface AppOptions {
   /** 원본 틱 저장소 (로컬 전용, 서버리스에서는 null) */
   readonly ticks?: TickStore | null;
   readonly cryptoMinutes?: MinuteFetcher;
+  readonly rateLimit?: { readonly maxCreates: number; readonly windowMs: number };
 }
 
 export interface App {
@@ -91,6 +92,6 @@ export function createApp(opts: AppOptions): App {
     const tickDays = await collectYesterdayTicks();
     return { requeued: ids.length, collected, tickDays };
   };
-  const handle = createRouter({ runs, queue, jevLive: live !== null, publicDir: CONFIG.publicDir, intraday, collector, prices, onCron: tick, ticks });
+  const handle = createRouter({ runs, queue, jevLive: live !== null, publicDir: CONFIG.publicDir, intraday, collector, prices, onCron: tick, ticks, rateLimit: opts.rateLimit });
   return { handle, queue, runs, collector, trackedSymbols, tick, collectYesterdayTicks };
 }

@@ -1,5 +1,5 @@
 import { api, qs } from '../api.js';
-import { esc, meta, money, pct, marketLabel, intervalLabel, tickersText, strategyFriendly } from '../format.js';
+import { esc, meta, money, pct, marketLabel, intervalLabel, tickersText, strategyFriendly, thresholdLabel, exitRuleLabel } from '../format.js';
 import { buildTimeline } from '../replay/timeline.js';
 import { createLiveChart } from '../replay/liveChart.js';
 
@@ -25,7 +25,7 @@ function shell(run) {
   <div class="play-head">
     <div>
       <h2>${esc(run.nickname)}의 “${esc(strategyFriendly(run.strategy))}” 매매 <span class="badge ${run.engine === 'live' ? 'live' : ''}">${esc(engine)}</span></h2>
-      <p class="lead">${esc(marketLabel(run.market))} · ${esc(tickersText(run))} · ${esc(run.start_date)} ~ ${esc(run.end_date)} · ${esc(intervalLabel(run.interval_days))} 판단</p>
+      <p class="lead">${esc(marketLabel(run.market))} · ${esc(tickersText(run))} · ${esc(run.start_date)} ~ ${esc(run.end_date)} · ${esc(intervalLabel(run.interval_days))} 판단 · 기준 ${esc(thresholdLabel(run.threshold))}${run.exit_rule ? ` · ${esc(exitRuleLabel(run.exit_rule))}` : ''}</p>
     </div>
     <div class="controls" role="group" aria-label="재생 조작">
       <button type="button" class="ctl" data-act="toggle" aria-label="일시정지">⏸</button>

@@ -27,6 +27,9 @@ export const strategyLabel = (s) => META?.strategies[s]?.label ?? s;
 /** 사용자에게 보여 주는 쉬운 전략 이름 */
 export const STRATEGY_FRIENDLY = { choice: '단호하게', probability: '확률대로', noul: '오를까?', score: '등급으로' };
 export const strategyFriendly = (s) => STRATEGY_FRIENDLY[s] ?? s;
+/** 확신 임계값 표시 (도입 전 실행은 '이전 규칙') */
+export const thresholdLabel = (t) => (t == null ? '이전 규칙' : `${Math.round(Number(t) * 100)}%`);
+export const exitRuleLabel = (r) => META?.exitRules?.[r]?.label ?? (r ? r : '');
 export const effortLabel = (e) => META?.efforts[e]?.label ?? e;
 export const intervalLabel = (d) => META?.intervals.find((i) => i.days === Number(d))?.label ?? `${d}일`;
 export const marketLabel = (m) => META?.markets[m]?.label ?? m;

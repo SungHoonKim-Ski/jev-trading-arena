@@ -130,7 +130,7 @@ test('틱 체결 사전 점검: 필요한 틱 용량이 남은 용량을 넘으�
 
 test('틱 저장소 없이 재개된 틱 실행은 분봉으로 바꾸지 않고 실패 처리', async () => {
   const app3 = createApp({ db: await openLocalDatabase(':memory:'), fetcher, liveJev: null, ticks: null, cryptoMinutes, intradayFetcher: async () => [] });
-  const id = await app3.runs.create({ nickname: 'r', market: 'CRYPTO', tickers: ['BTC'], startDate: '2025-01-01', endDate: '2025-02-01', intervalDays: 7, effort: 'low', strategy: 'noul', initialCapital: 10000, engine: 'mock', execution: 'tick' }, 'g');
+  const id = await app3.runs.create({ nickname: 'r', market: 'CRYPTO', tickers: ['BTC'], startDate: '2025-01-01', endDate: '2025-02-01', intervalDays: 7, effort: 'low', strategy: 'noul', initialCapital: 10000, engine: 'mock', execution: 'tick', threshold: 0.8, exitRule: 'opposite' }, 'g');
   app3.queue.enqueue([id]);
   await app3.queue.onIdle();
   const run = (await app3.runs.get(id))!;

@@ -21,12 +21,18 @@ test('간단 매매: 전략 1개 선택 → 하루씩 재생 → 결과 카드 �
   await expect(page.locator('.simple-form input[type="checkbox"]:not([name="compare"]):not(.compare-box input)')).toHaveCount(0);
   await page.getByRole('radio', { name: 'S&P 500 (SPY)' }).check();
   await expect(page.locator('input[name="ticker"]:checked')).toHaveCount(1);
+  // 확신 기준: 기본 80%, 90%로 변경. 매도 규칙 기본은 반대 확신 매도
+  await expect(page.getByRole('radio', { name: '80%' })).toBeChecked();
+  await page.getByRole('radio', { name: '90%' }).check();
+  await expect(page.locator('input[name="exitRule"][value="opposite"]')).toBeChecked();
   await page.getByLabel('닉네임').fill('e2e_user');
   await page.getByRole('button', { name: '▶ 매매 시작' }).click();
 
   await expect(page).toHaveURL(/#play\/\d+/);
   await expect(page.locator('.scoreboard')).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole('heading', { name: /e2e_user의 “등급으로” 매매/ })).toBeVisible();
+  await expect(page.locator('.play-head .lead')).toContainText('기준 90%');
+  await expect(page.locator('.play-head .lead')).toContainText('반대 확신 매도');
   // 재생 중에는 날짜가 앞으로 간다
   const first = await page.locator('#today').textContent();
   await expect.poll(async () => page.locator('#today').textContent(), { timeout: 10_000 }).not.toBe(first);

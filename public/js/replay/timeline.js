@@ -6,9 +6,19 @@
 
 const SCORE_LABELS = ['강력매도', '매도', '중립', '매수', '강력매수'];
 
-/** Jev 판단을 전략에 맞는 쉬운 문장으로 */
-export function signalText(strategy, decision) {
+/**
+ * Jev 판단을 쉬운 문장으로.
+ * 임계값이 있는 실행: signal은 행동을 일으킨 확률(매수=오를 쪽, 매도=내릴 쪽)
+ * 임계값 도입 전 실행(threshold 없음): 전략별 이전 문장
+ * @param {string} strategy
+ * @param {{ action?: string, signal: number, confidence: number }} decision
+ * @param {number | null} [threshold]
+ */
+export function signalText(strategy, decision, threshold = null) {
   const pct = (v) => `${Math.round(v * 100)}%`;
+  if (threshold != null) {
+    return `${decision.action === 'sell' ? '내릴' : '오를'} 확률 ${pct(decision.signal)} (기준 ${pct(threshold)})`;
+  }
   if (strategy === 'noul') return `오를 확률 ${pct(decision.signal)}`;
   if (strategy === 'probability') return `강세 확률 ${pct(decision.signal)}`;
   if (strategy === 'score') {
@@ -70,7 +80,7 @@ export function buildTimeline(detail) {
   const events = [];
   for (const d of detail.decisions) {
     if (d.action === 'hold' || !frameOf.has(d.date)) continue;
-    events.push({ frame: frameOf.get(d.date), type: 'decision', symbol: d.symbol, action: d.action, text: signalText(detail.run.strategy, d), targetWeight: d.targetWeight });
+    events.push({ frame: frameOf.get(d.date), type: 'decision', symbol: d.symbol, action: d.action, text: signalText(detail.run.strategy, d, detail.run.threshold), targetWeight: d.targetWeight });
   }
   for (const t of detail.trades) {
     if (!frameOf.has(t.date)) continue;

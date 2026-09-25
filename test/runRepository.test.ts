@@ -6,7 +6,7 @@ import type { RunParams } from '../src/types.ts';
 
 const PARAMS: RunParams = {
   nickname: 'alice', market: 'US', tickers: ['AAPL'], startDate: '2024-01-01', endDate: '2024-12-31',
-  intervalDays: 5, effort: 'low', strategy: 'noul', initialCapital: 10000, engine: 'mock', execution: 'open',
+  intervalDays: 5, effort: 'low', strategy: 'noul', initialCapital: 10000, engine: 'mock', execution: 'open', threshold: 0.8, exitRule: 'opposite',
 };
 
 function artifacts(totalReturn: number, bench = 0.1): RunArtifacts {

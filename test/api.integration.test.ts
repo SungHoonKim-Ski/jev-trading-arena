@@ -38,7 +38,7 @@ let server: Server;
 let base: string;
 
 before(async () => {
-  app = createApp({ db: await openLocalDatabase(':memory:'), fetcher: fakeFetcher, liveJev: fakeLive, intradayFetcher: fakeIntraday });
+  app = createApp({ db: await openLocalDatabase(':memory:'), fetcher: fakeFetcher, liveJev: fakeLive, intradayFetcher: fakeIntraday, rateLimit: { maxCreates: 1000, windowMs: 60_000 } });
   server = createServer((req, res) => { void app.handle(req, res); });
   await new Promise<void>((r) => server.listen(0, r));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -120,6 +120,8 @@ test('입력 검증 오류는 400과 한국어 메시지', async () => {
     [{ endDate: '2999-01-01' }, /오늘/],
     [{ strategies: [] }, /전략/],
     [{ intervals: [3] }, /매매 주기/],
+    [{ threshold: 0.6 }, /임계값/],
+    [{ exitRule: 'panic' }, /exitRule|Invalid/],
     [{ nickname: '<script>' }, /닉네임/],
     [{ strategies: ['choice', 'probability', 'noul', 'score'], efforts: ['low', 'medium', 'high'], intervals: [1, 5, 10] }, /최대/],
   ];
@@ -184,8 +186,29 @@ test('크론 엔드포인트: CRON_SECRET 없으면 비활성(404)', async () =>
 
 test('tick: 멈춘 실행 복구 후 재실행', async () => {
   const id = await app.runs.create({ nickname: 'stuck', market: 'US', tickers: ['AAPL'], startDate: '2024-01-02', endDate: '2024-03-29',
-    intervalDays: 5, effort: 'low', strategy: 'noul', initialCapital: 10000, engine: 'mock', execution: 'open' }, 'gs');
+    intervalDays: 5, effort: 'low', strategy: 'noul', initialCapital: 10000, engine: 'mock', execution: 'open', threshold: 0.8, exitRule: 'opposite' }, 'gs');
   const result = await app.tick();
   assert.ok(result.requeued >= 1);
   assert.equal((await app.runs.get(id))!.status, 'done');
+});
+
+test('임계값: 실행에 저장되고, 높을수록 거래가 적다 (같은 데이터·전략)', async () => {
+  const run = async (threshold: number, exitRule = 'opposite') => {
+    const { data } = await (await post(body({ nickname: `th${threshold}${exitRule}`, tickers: ['AAPL'], strategies: ['noul'], efforts: ['low'], intervals: [1], threshold, exitRule }))).json();
+    await app.queue.onIdle();
+    return (await (await fetch(`${base}/api/runs/${data.runIds[0]}`)).json()).data.run;
+  };
+  const loose = await run(0.7);
+  const strict = await run(0.95);
+  const drop = await run(0.7, 'drop');
+  assert.equal(loose.threshold, 0.7);
+  assert.equal(loose.exit_rule, 'opposite');
+  assert.equal(drop.exit_rule, 'drop');
+  assert.ok(strict.trades <= loose.trades, `95%: ${strict.trades}건, 70%: ${loose.trades}건`);
+  assert.ok(drop.trades >= loose.trades, `즉시 매도는 거래가 더 잦음: ${drop.trades} vs ${loose.trades}`);
+  const meta = (await (await fetch(`${base}/api/meta`)).json()).data;
+  assert.deepEqual(meta.thresholds, [0.95, 0.9, 0.85, 0.8, 0.75, 0.7]);
+  assert.equal(meta.defaultThreshold, 0.8);
+  const filtered = (await (await fetch(`${base}/api/leaderboard?threshold=0.95`)).json()).data;
+  assert.ok(filtered.every((r: { threshold: number }) => r.threshold === 0.95));
 });
