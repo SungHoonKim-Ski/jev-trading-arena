@@ -292,3 +292,67 @@ label.chip.choice:has(input:checked) .dot { border-color: var(--accent-ink); bac
 .group-label { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
 
 .step-hint { margin: -2px 0 8px; }
+
+/* ── 랭킹 ─────────────────────────────────── */
+.rank-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 16px; }
+.seg.tabs { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 3px; }
+.seg.tabs .tab { position: relative; cursor: pointer; }
+.seg.tabs .tab input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.seg.tabs .tab span { display: inline-block; padding: 6px 14px; border-radius: 999px; font-weight: 600; font-size: 14px; color: var(--text-2); }
+.seg.tabs .tab input:checked + span { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+.seg.tabs .tab input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
+.more-filters { flex-basis: 100%; }
+.more-filters summary { cursor: pointer; color: var(--text-2); font-size: 13px; }
+.more-filters[open] summary { margin-bottom: 10px; }
+.legacy-toggle { font-size: 13px; color: var(--text-2); display: inline-flex; gap: 6px; align-items: center; }
+.my-rank { display: grid; grid-template-columns: auto auto 1fr auto; gap: 16px 28px; align-items: center; background: var(--surface);
+  border: 2px solid var(--accent); border-radius: var(--radius); padding: 14px 18px; margin-bottom: 16px; }
+.my-rank .k { color: var(--muted); font-size: 12px; }
+.my-rank .v { font-size: 24px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.my-rank .of { font-size: 14px; color: var(--muted); font-weight: 500; }
+.my-rank .chase { color: var(--text-2); }
+.my-rank .row { gap: 12px; }
+.my-rank.empty-cta { display: flex; gap: 12px; flex-wrap: wrap; border-style: dashed; color: var(--text-2); }
+.podium { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: end; margin-bottom: 16px; }
+.podium-card { display: flex; flex-direction: column; gap: 4px; text-decoration: none; color: var(--text); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 14px; padding: 16px; transition: transform 0.15s, box-shadow 0.15s; }
+.podium-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08); }
+.podium-card.place-1 { padding-top: 28px; padding-bottom: 22px; border: 2px solid #d4a017; }
+.podium-card .medal { font-size: 28px; }
+.podium-card.place-1 .medal { font-size: 38px; }
+.podium-card .who { font-weight: 700; font-size: 16px; }
+.podium-card .big { font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.podium-card.place-1 .big { font-size: 34px; }
+.podium-card .small { font-size: 13px; font-weight: 600; }
+.podium-card .meta, .rank-row .meta { color: var(--muted); font-size: 12px; font-weight: 400; }
+.podium-card .replay-hint { color: var(--accent); font-size: 12px; font-weight: 600; margin-top: 4px; opacity: 0; transition: opacity 0.15s; }
+.podium-card:hover .replay-hint, .podium-card:focus-visible .replay-hint { opacity: 1; }
+.spark { width: 100%; height: 48px; margin: 6px 0; }
+.spark path { fill: none; stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.spark path.up { stroke: var(--up); }
+.spark path.down { stroke: var(--down); }
+.rank-list { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.rank-list li + li { border-top: 1px solid var(--grid); }
+.rank-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 16px; text-decoration: none; color: var(--text); }
+.rank-row:hover { background: var(--surface-2); }
+.rank-row .pos-no { font-weight: 750; font-size: 18px; color: var(--text-2); text-align: center; font-variant-numeric: tabular-nums; }
+.rank-row .who { display: flex; flex-direction: column; min-width: 0; }
+.rank-row .who .name { display: flex; gap: 6px; align-items: center; }
+.rank-row .who .meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rank-row .figs { display: flex; flex-direction: column; align-items: flex-end; font-variant-numeric: tabular-nums; }
+.rank-row .figs b { font-size: 18px; }
+.rank-row .figs span { font-size: 12px; }
+.rank-row.mine, .podium-card.mine { background: color-mix(in oklab, var(--accent) 10%, var(--surface)); }
+@media (max-width: 760px) {
+  .podium { grid-template-columns: 1fr; }
+  .podium-card.place-1 { order: -1; }
+  .my-rank { grid-template-columns: 1fr 1fr; }
+  .my-rank .chase, .my-rank .row { grid-column: 1 / -1; }
+  /* 모바일: 2·3위는 작게, 목록 설명은 한 줄 */
+  .podium-card.place-2 .spark, .podium-card.place-3 .spark, .podium-card.place-2 .meta, .podium-card.place-3 .meta { display: none; }
+  .podium-card.place-2 .big, .podium-card.place-3 .big { font-size: 22px; }
+  .podium-card .replay-hint { display: none; }
+  .podium-card.place-2, .podium-card.place-3 { padding: 12px 16px; }
+  .rank-row { grid-template-columns: 32px minmax(0, 1fr) auto; padding: 10px 12px; }
+}
+@media (prefers-reduced-motion: reduce) { .podium-card { transition: none; } }
