@@ -1,0 +1,27 @@
+{
+  "name": "jev-trading-arena",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Jev(TypeSafe System One) 기반 한국/미국 주식 모의 트레이딩 백테스트 + 랭킹",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/server.ts",
+    "dev": "node --watch src/server.ts",
+    "test": "node --test --test-reporter=spec 'test/**/*.test.ts'",
+    "coverage": "node --test --experimental-test-coverage --test-coverage-exclude='test/**' --test-coverage-exclude='node_modules/**' 'test/**/*.test.ts'",
+    "typecheck": "tsc --noEmit",
+    "collect": "node src/cli/collect.ts",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.2",
+    "typescript": "^7.0.2"
+  }
+}
