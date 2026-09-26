@@ -46,6 +46,8 @@ function checks(name, entries, checkedKeys) {
 function advancedTemplate(m, market) {
   const intervals = market.intervals;
   const isCrypto = state.market === 'CRYPTO';
+  // 코인은 원본 틱 체결이 기본 (주식은 틱 데이터가 없어 다음 날 시가)
+  const tickDefault = isCrypto && m.ticksEnabled;
   return `
   <details class="advanced">
     <summary>고급 설정 <span class="hint">기간 직접 입력 · 자본 · 매도 규칙 · effort · 매매 주기 · 체결 · 여러 조합 비교</span></summary>
@@ -57,10 +59,10 @@ function advancedTemplate(m, market) {
         <button type="button" data-engine="live" aria-pressed="${m.jevLive}" ${m.jevLive ? '' : 'disabled'}>Jev (${esc(m.model)})</button>
         <button type="button" data-engine="mock" aria-pressed="${!m.jevLive}">Mock</button></div></div>
       <div class="field"><b>체결 방식</b><div class="seg" role="group" aria-label="체결 방식">
-        <button type="button" data-execution="open" aria-pressed="true">다음 날 시가</button>
+        <button type="button" data-execution="open" aria-pressed="${!tickDefault}">다음 날 시가</button>
         <button type="button" data-execution="vwap" aria-pressed="false">분봉 VWAP</button>
-        ${isCrypto && m.ticksEnabled ? '<button type="button" data-execution="tick" aria-pressed="false">원본 틱</button>' : ''}</div>
-        ${isCrypto && m.ticksEnabled ? `<span class="hint">원본 틱: 체결일 0시부터 바이낸스의 실제 체결을 따라가며, 시장 거래량의 ${Math.round(m.tickParticipation * 100)}%만 내 주문이 가져간다고 보고 체결가를 계산합니다.</span>` : ''}</div>
+        ${tickDefault ? '<button type="button" data-execution="tick" aria-pressed="true">원본 틱 (기본)</button>' : ''}</div>
+        ${tickDefault ? `<span class="hint">원본 틱: 체결일 0시부터 바이낸스의 실제 체결을 따라가며, 시장 거래량의 ${Math.round(m.tickParticipation * 100)}%만 내 주문이 가져간다고 보고 체결가를 계산합니다.</span>` : ''}</div>
     </div>
     <h3>매도 규칙</h3>
     <div class="checks">${radios('exitRule', Object.entries(m.exitRules).map(([k, v]) => [k, v.label, v.description]), 'opposite')}</div>
@@ -125,7 +127,7 @@ function formValues(form) {
     endDate: String(fd.get('endDate')),
     initialCapital: Number(fd.get('initialCapital')),
     engine: form.querySelector('[data-engine][aria-pressed="true"]')?.dataset.engine ?? 'mock',
-    execution: form.querySelector('[data-execution][aria-pressed="true"]')?.dataset.execution ?? 'open',
+    execution: form.querySelector('[data-execution][aria-pressed="true"]')?.dataset.execution,
     strategies: ['noul'], // Jev 질문은 '오를까?'(예/아니오) 하나
     efforts: compare ? all('efforts') : [String(fd.get('effort') ?? EFFORT_DEFAULT)],
     intervals: (compare ? all('intervals') : [String(fd.get('interval'))]).map(Number),

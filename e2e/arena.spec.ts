@@ -81,6 +81,8 @@ test('코인: 5종 칩만 제공, 고급 설정의 여러 조합 비교는 결�
   await page.getByLabel('닉네임').fill('coin_e2e');
   await page.getByText('고급 설정').click();
   await expect(page.getByText('7일마다 판단')).toBeVisible();
+  // 코인 기본 체결은 원본 틱 (E2E 서버는 틱 체결이 없어 시가가 기본)
+  await expect(page.locator('[data-execution="open"]')).toHaveAttribute('aria-pressed', 'true');
   await page.getByLabel(/여러 조합 한 번에 비교/).check();
   await expect(page.locator('.compare-box input[name="strategies"]')).toHaveCount(0);
   await page.locator('.compare-box input[name="efforts"][value="high"]').check();

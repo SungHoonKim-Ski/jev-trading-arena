@@ -178,3 +178,14 @@ test('서버리스 구성: 원본 틱 저장 없이 스트리밍으로 틱 체�
     srv.close();
   }
 });
+
+test('기본 체결 방식: 코인은 원본 틱, 주식은 다음 날 시가 (execution 생략 시)', async () => {
+  const coin = await post('/api/runs', { nickname: 'def', market: 'CRYPTO', tickers: ['BTC'], startDate: '2025-01-01', endDate: '2025-02-28', initialCapital: 10000, engine: 'mock', efforts: ['low'], intervals: [7] });
+  assert.equal(coin.status, 202, await coin.clone().text());
+  const stock = await post('/api/runs', { nickname: 'def', market: 'US', tickers: ['AAPL'], startDate: '2025-01-01', endDate: '2025-02-28', initialCapital: 10000, engine: 'mock', efforts: ['low'], intervals: [5] });
+  assert.equal(stock.status, 202, await stock.clone().text());
+  await app.queue.onIdle();
+  const exec = async (r: Response) => (await (await fetch(`${base}/api/runs/${(await r.json()).data.runIds[0]}`)).json()).data.run.execution;
+  assert.equal(await exec(coin), 'tick');
+  assert.equal(await exec(stock), 'open');
+});

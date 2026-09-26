@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { ACTIVE_STRATEGIES, ALL_INTERVALS, CONFIG, DEFAULT_THRESHOLD, EFFORT_INFO, EXIT_RULES, MARKETS, STRATEGY_INFO, THRESHOLDS } from '../config.ts';
 import type { RunRepository } from '../db/runRepository.ts';
 import type { RunQueue } from '../backtest/queue.ts';
-import type { Effort, RunParams, Strategy } from '../types.ts';
+import type { Effort, ExecutionModel, RunParams, Strategy } from '../types.ts';
 import { clientIp, fail, HttpError, ok, RateLimiter, readJson } from './http.ts';
 import { TICKER_PRESETS } from '../market/presets.ts';
 import { logger } from '../logger.ts';
@@ -33,7 +33,12 @@ export interface RouterDeps {
   readonly rateLimit?: { readonly maxCreates: number; readonly windowMs: number };
 }
 
-function expandCombos(input: CreateRunInput): RunParams[] {
+/** 기본 체결 방식: 코인은 틱 체결을 쓸 수 있으면 원본 틱, 그 외는 다음 날 시가 */
+function defaultExecution(market: CreateRunInput['market'], tickPricer: TickPricer | null): ExecutionModel {
+  return market === 'CRYPTO' && tickPricer ? 'tick' : 'open';
+}
+
+function expandCombos(input: CreateRunInput & { execution: ExecutionModel }): RunParams[] {
   const tickers = [...new Set(input.tickers)];
   return input.strategies.flatMap((strategy) => input.efforts.flatMap((effort) => input.intervals.map((intervalDays) => ({
     nickname: input.nickname, market: input.market, tickers, startDate: input.startDate, endDate: input.endDate,
@@ -85,9 +90,10 @@ export function createRouter(deps: RouterDeps): RequestHandler {
     if (!limiter.allow(clientIp(req, CONFIG.trustProxy))) throw new HttpError(429, '요청이 너무 많습니다. 잠시 후 다시 시도하세요');
     const parsed = createRunSchema.safeParse(await readJson(req));
     if (!parsed.success) throw new HttpError(400, formatZodError(parsed.error));
-    if (parsed.data.execution === 'tick') await assertTickBudget(parsed.data);
-    if (parsed.data.engine === 'live' && !deps.jevLive) throw new HttpError(400, 'TYPESAFE_API_KEY가 설정되지 않아 실제 Jev 엔진을 사용할 수 없습니다');
-    const combos = expandCombos(parsed.data);
+    const input = { ...parsed.data, execution: parsed.data.execution ?? defaultExecution(parsed.data.market, deps.tickPricer) };
+    if (input.execution === 'tick') await assertTickBudget(input);
+    if (input.engine === 'live' && !deps.jevLive) throw new HttpError(400, 'TYPESAFE_API_KEY가 설정되지 않아 실제 Jev 엔진을 사용할 수 없습니다');
+    const combos = expandCombos(input);
     if (combos.length > CONFIG.maxRunsPerRequest) throw new HttpError(400, `조합이 ${combos.length}개입니다. 한 번에 최대 ${CONFIG.maxRunsPerRequest}개까지 실행할 수 있습니다`);
     const groupId = randomUUID();
     const ids: number[] = [];
