@@ -30,7 +30,8 @@ export const createRunSchema = z.object({
   endDate: DATE,
   initialCapital: z.number().finite().min(100, '초기 자본이 너무 작습니다').max(1e12),
   engine: z.enum(['live', 'mock']),
-  execution: z.enum(['open', 'vwap', 'tick']).default('open'),
+  // 생략하면 서버가 시장에 맞게 정한다 (코인: 원본 틱, 주식: 다음 날 시가)
+  execution: z.enum(['open', 'vwap', 'tick']).optional(),
   threshold: z.number().refine((t) => THRESHOLDS.includes(t), `임계값은 ${THRESHOLDS.map((t) => `${t * 100}%`).join(', ')} 중 하나여야 합니다`).default(DEFAULT_THRESHOLD),
   exitRule: z.enum(['opposite', 'drop']).default('opposite'),
   // 새 실행은 '오를까?'(예/아니오) 질문만 지원. 3지선다·5단계는 이전 기록 조회용으로만 남아 있다
