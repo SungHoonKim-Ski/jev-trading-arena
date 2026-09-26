@@ -83,6 +83,11 @@ CREATE TABLE IF NOT EXISTS intraday_bars (
   PRIMARY KEY (symbol, interval, ts)
 );
 CREATE INDEX IF NOT EXISTS idx_intraday_day ON intraday_bars(symbol, interval, date);
+CREATE TABLE IF NOT EXISTS tick_fill_cache (
+  key TEXT PRIMARY KEY,
+  price REAL NOT NULL,
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS jev_cache (
   key TEXT PRIMARY KEY,
   model TEXT NOT NULL,

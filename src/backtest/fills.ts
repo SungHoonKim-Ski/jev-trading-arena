@@ -1,7 +1,7 @@
 import type { IntradayDay, IntradayRepository } from '../db/intradayRepository.ts';
 import { adjustedFill, type IntradayBar } from '../market/intraday.ts';
 import type { SymbolBars } from '../market/priceService.ts';
-import type { TickStore } from '../ticks/types.ts';
+import type { TickPricer } from '../ticks/types.ts';
 import type { Bar, RunParams, Trade } from '../types.ts';
 import { logger } from '../logger.ts';
 import type { FillPriceFn } from './engine.ts';
@@ -11,7 +11,7 @@ export type MinuteFetcher = (symbol: string, fromSec: number, toSec: number) => 
 
 export interface FillDeps {
   readonly intraday: IntradayRepository;
-  readonly ticks: TickStore | null;
+  readonly ticks: TickPricer | null;
   /** 코인 1분봉을 필요한 날만 받아 오는 함수 (바이낸스) */
   readonly cryptoMinutes: MinuteFetcher;
   readonly participation: number;
@@ -69,7 +69,6 @@ export function makeFillPrice(
   const tickPrice = async (symbol: string, date: string, quantity: number): Promise<number | null> => {
     if (!deps.ticks) return null;
     try {
-      await deps.ticks.loadDay(symbol, date);
       return await deps.ticks.fillPrice(symbol, date, quantity, deps.participation);
     } catch (err) {
       warnOnce(`tick:${symbol}:${errorKey(err)}`, `tick data unavailable (${symbol} ${date}); falling back to minute VWAP`, err);

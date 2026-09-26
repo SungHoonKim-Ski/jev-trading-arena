@@ -9,7 +9,7 @@ import { TICKER_PRESETS } from '../market/presets.ts';
 import { logger } from '../logger.ts';
 import { serveStatic } from './staticFiles.ts';
 import { collectSchema, createRunSchema, formatZodError, rankQuerySchema, tickCollectSchema, type CreateRunInput } from './validation.ts';
-import type { TickStore } from '../ticks/types.ts';
+import type { TickPricer, TickStore } from '../ticks/types.ts';
 import { CRYPTO_ASSETS, resolveCryptoSymbol } from '../market/binance.ts';
 import { estimateTickBytes } from '../ticks/estimate.ts';
 import type { IntradayRepository } from '../db/intradayRepository.ts';
@@ -28,6 +28,7 @@ export interface RouterDeps {
   /** 주기 작업(멈춘 실행 복구, 분봉 수집). 서버리스 크론에서 호출 */
   readonly onCron: () => Promise<unknown>;
   readonly ticks: TickStore | null;
+  readonly tickPricer: TickPricer | null;
   /** 생성 요청 제한 (기본 CONFIG.rateLimit) */
   readonly rateLimit?: { readonly maxCreates: number; readonly windowMs: number };
 }
@@ -41,10 +42,11 @@ function expandCombos(input: CreateRunInput): RunParams[] {
   }))));
 }
 
-function meta(jevLive: boolean, ticksEnabled: boolean) {
+function meta(jevLive: boolean, tickPricer: TickPricer | null) {
   return {
     jevLive,
-    ticksEnabled,
+    ticksEnabled: tickPricer !== null,
+    tickMode: tickPricer?.mode ?? null,
     tickParticipation: CONFIG.ticks.participation,
     cryptoAssets: CRYPTO_ASSETS,
     model: CONFIG.jev.model,
@@ -120,11 +122,20 @@ export function createRouter(deps: RouterDeps): RequestHandler {
 
   /** 틱 체결은 체결일마다 하루치 틱이 필요하므로, 용량 상한을 넘을 요청은 시작 전에 거부 */
   async function assertTickBudget(input: CreateRunInput): Promise<void> {
-    if (!deps.ticks) throw new HttpError(400, '이 서버에서는 틱 체결을 사용할 수 없습니다 (원본 틱 저장소는 로컬 전용)');
+    if (!deps.tickPricer) throw new HttpError(400, '이 서버에서는 틱 체결을 사용할 수 없습니다');
     const symbols = [...new Set(input.tickers.map((t) => resolveCryptoSymbol(t)!))];
-    const stored = new Map(await Promise.all(symbols.map(async (s) => [s, await deps.ticks!.storedDays(s, input.startDate, input.endDate)] as const)));
+    if (deps.tickPricer.mode === 'stream' || !deps.ticks) {
+      // 스트리밍: 저장은 없지만 체결일마다 파일을 받으므로 한 번에 처리할 날짜 수를 제한 (함수 실행 시간 보호)
+      const need = estimateTickBytes({ symbols, startDate: input.startDate, endDate: input.endDate, intervals: input.intervals }, new Map());
+      if (need.days > CONFIG.ticks.maxStreamDays) {
+        throw new HttpError(400, `틱 체결은 한 번에 체결일 ${CONFIG.ticks.maxStreamDays}개(코인·일)까지 계산할 수 있습니다. 지금 요청은 약 ${need.days}개입니다. 기간을 줄이거나 매매 주기를 늘려 주세요`);
+      }
+      return;
+    }
+    const store = deps.ticks;
+    const stored = new Map(await Promise.all(symbols.map(async (s) => [s, await store.storedDays(s, input.startDate, input.endDate)] as const)));
     const need = estimateTickBytes({ symbols, startDate: input.startDate, endDate: input.endDate, intervals: input.intervals }, stored);
-    const remaining = deps.ticks.maxBytes - deps.ticks.sizeBytes();
+    const remaining = store.maxBytes - store.sizeBytes();
     if (need.bytes > remaining) {
       const gbText = (b: number) => `${(b / 1e9).toFixed(1)}GB`;
       throw new HttpError(400, `틱 체결에 새로 받아야 할 틱이 약 ${gbText(need.bytes)}(${need.days}개 코인·일)로 남은 용량 ${gbText(Math.max(0, remaining))}을 넘습니다. 기간을 줄이거나 매매 주기를 늘리거나 TICK_STORE_MAX_GB를 늘리세요`);
@@ -174,7 +185,7 @@ export function createRouter(deps: RouterDeps): RequestHandler {
     const { pathname } = url;
     const method = req.method ?? 'GET';
 
-    if (pathname === '/api/meta' && method === 'GET') return ok(res, meta(deps.jevLive, deps.ticks !== null));
+    if (pathname === '/api/meta' && method === 'GET') return ok(res, meta(deps.jevLive, deps.tickPricer));
     if (pathname === '/api/runs' && method === 'POST') return createRuns(req, res);
     if (pathname === '/api/runs' && method === 'GET') {
       const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') ?? 50) || 50));

@@ -137,3 +137,44 @@ test('틱 저장소 없이 재개된 틱 실행은 분봉으로 바꾸지 않고
   assert.equal(run.status, 'failed');
   assert.match(String(run.error), /틱 저장소가 꺼져/);
 });
+
+test('서버리스 구성: 원본 틱 저장 없이 스트리밍으로 틱 체결, 체결일 수 제한', async () => {
+  const { StreamingTickPricer } = await import('../src/ticks/streamingTickPricer.ts');
+  const { TickFillCacheRepository } = await import('../src/db/tickFillCacheRepository.ts');
+  const { zipSync } = await import('fflate');
+  let downloads = 0;
+  const zipFetch = (async (url: string) => {
+    downloads++;
+    const date = /trades-(\d{4}-\d{2}-\d{2})\.zip/.exec(String(url))![1]!;
+    try {
+      const { csv } = await downloader.download('BTCUSDT', date);
+      return new Response(zipSync({ 'x.csv': csv }));
+    } catch {
+      return new Response('', { status: 404 });
+    }
+  }) as unknown as typeof fetch;
+  const db = await openLocalDatabase(':memory:');
+  const appS = createApp({ db, fetcher, liveJev: null, ticks: null, tickPricer: new StreamingTickPricer(new TickFillCacheRepository(db), zipFetch), cryptoMinutes, intradayFetcher: async () => [] });
+  const srv = createServer((req, res) => { void appS.handle(req, res); });
+  await new Promise<void>((r) => srv.listen(0, r));
+  const b = `http://127.0.0.1:${(srv.address() as AddressInfo).port}`;
+  try {
+    const m = (await (await fetch(`${b}/api/meta`)).json()).data;
+    assert.equal(m.ticksEnabled, true);
+    assert.equal(m.tickMode, 'stream');
+    const req = { nickname: 's', market: 'CRYPTO', tickers: ['BTC'], startDate: '2025-01-01', endDate: '2025-02-28', initialCapital: 10000, engine: 'mock', efforts: ['low'], intervals: [7], execution: 'tick', threshold: 0.7 };
+    const res = await fetch(`${b}/api/runs`, { method: 'POST', body: JSON.stringify(req) });
+    assert.equal(res.status, 202, await res.clone().text());
+    const { data } = await res.json();
+    await appS.queue.onIdle();
+    const run = (await (await fetch(`${b}/api/runs/${data.runIds[0]}`)).json()).data.run;
+    assert.equal(run.status, 'done', run.error);
+    assert.equal(run.tick_fills, run.trades, JSON.stringify(run));
+    assert.ok(downloads > 0);
+    const tooMany = await fetch(`${b}/api/runs`, { method: 'POST', body: JSON.stringify({ ...req, startDate: '2023-01-01', endDate: '2025-02-28', intervals: [1] }) });
+    assert.equal(tooMany.status, 400);
+    assert.match((await tooMany.json()).error, /체결일/);
+  } finally {
+    srv.close();
+  }
+});

@@ -33,3 +33,10 @@ export interface TickStore {
   readonly maxBytes: number;
   close(): void;
 }
+
+/** 체결가 계산만 하는 인터페이스 (로컬: 저장된 틱, 서버리스: 스트리밍) */
+export interface TickPricer {
+  readonly mode: 'local' | 'stream';
+  /** 시장 체결량의 participation 비율만 내 주문이 가져간다고 볼 때 평균 체결가. 틱이 없으면 null */
+  fillPrice(symbol: string, date: string, quantity: number, participation: number): Promise<number | null>;
+}

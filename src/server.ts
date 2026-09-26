@@ -5,6 +5,9 @@ import { openRemoteDatabase } from './db/client.web.ts';
 import { createApp } from './app.ts';
 import { logger } from './logger.ts';
 import type { TickStore } from './ticks/types.ts';
+import { localTickPricer } from './ticks/localTickPricer.ts';
+import { StreamingTickPricer } from './ticks/streamingTickPricer.ts';
+import { TickFillCacheRepository } from './db/tickFillCacheRepository.ts';
 
 /** 원본 틱 저장소는 DuckDB 네이티브 모듈이라 로컬 서버에서만 연다 (서버리스 번들에 포함되지 않도록 동적 import) */
 async function openTickStore(): Promise<TickStore | null> {
@@ -23,7 +26,9 @@ async function openTickStore(): Promise<TickStore | null> {
 /** TURSO_DATABASE_URL이 있으면 원격 DB, 없으면 로컬 SQLite 파일 */
 const db = CONFIG.tursoUrl ? await openRemoteDatabase(CONFIG.tursoUrl, CONFIG.tursoToken) : await openLocalDatabase(CONFIG.dbPath);
 const ticks = await openTickStore();
-const app = createApp({ db, ticks });
+// DuckDB를 쓸 수 없으면 원본 틱 저장 없이 스트리밍으로 틱 체결
+const tickPricer = ticks ? localTickPricer(ticks) : CONFIG.ticks.enabled ? new StreamingTickPricer(new TickFillCacheRepository(db)) : null;
+const app = createApp({ db, ticks, tickPricer });
 
 const resumed = await app.runs.requeueUnfinished();
 if (resumed.length > 0) {
@@ -44,7 +49,7 @@ if (ticks && CONFIG.ticks.dailyCollect) {
 const server = createServer((req, res) => { void app.handle(req, res); });
 server.listen(CONFIG.port, CONFIG.host, () => {
   const engine = CONFIG.jev.apiKey ? `live (${CONFIG.jev.model})` : 'mock only (TYPESAFE_API_KEY 미설정)';
-  logger.info('server', `http://${CONFIG.host}:${CONFIG.port}  |  Jev engine: ${engine}  |  DB: ${CONFIG.tursoUrl ? 'Turso' : CONFIG.dbPath}  |  ticks: ${ticks ? CONFIG.ticks.path : 'off'}`);
+  logger.info('server', `http://${CONFIG.host}:${CONFIG.port}  |  Jev engine: ${engine}  |  DB: ${CONFIG.tursoUrl ? 'Turso' : CONFIG.dbPath}  |  ticks: ${ticks ? CONFIG.ticks.path : tickPricer ? 'streaming' : 'off'}`);
 });
 
 const shutdown = () => {

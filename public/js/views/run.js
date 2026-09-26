@@ -59,7 +59,8 @@ function advancedTemplate(m, market) {
       <div class="field"><b>체결 방식</b><div class="seg" role="group" aria-label="체결 방식">
         <button type="button" data-execution="open" aria-pressed="true">다음 날 시가</button>
         <button type="button" data-execution="vwap" aria-pressed="false">분봉 VWAP</button>
-        ${isCrypto && m.ticksEnabled ? '<button type="button" data-execution="tick" aria-pressed="false">원본 틱</button>' : ''}</div></div>
+        ${isCrypto && m.ticksEnabled ? '<button type="button" data-execution="tick" aria-pressed="false">원본 틱</button>' : ''}</div>
+        ${isCrypto && m.ticksEnabled ? `<span class="hint">원본 틱: 체결일 0시부터 바이낸스의 실제 체결을 따라가며, 시장 거래량의 ${Math.round(m.tickParticipation * 100)}%만 내 주문이 가져간다고 보고 체결가를 계산합니다.</span>` : ''}</div>
     </div>
     <h3>매도 규칙</h3>
     <div class="checks">${radios('exitRule', Object.entries(m.exitRules).map(([k, v]) => [k, v.label, v.description]), 'opposite')}</div>

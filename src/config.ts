@@ -7,6 +7,8 @@ export interface TickConfig {
   readonly maxBytes: number;
   readonly participation: number;
   readonly dailyCollect: boolean;
+  /** 스트리밍 틱 체결로 한 실행에서 계산할 최대 체결일 수 (코인·일) */
+  readonly maxStreamDays: number;
 }
 
 /** 원본 틱 설정. 잘못된 값은 조용히 넘기지 않고 시작 시 실패시킨다 */
@@ -23,6 +25,7 @@ export function readTickConfig(env: Readonly<Record<string, string | undefined>>
     maxBytes: maxGb * 1e9,
     participation,
     dailyCollect: env.TICK_DAILY_COLLECT !== 'off',
+    maxStreamDays: 400,
   };
 }
 

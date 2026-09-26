@@ -10,7 +10,7 @@ import { logger } from '../logger.ts';
 import { koreanName } from '../market/presets.ts';
 import type { IntradayDay, IntradayRepository } from '../db/intradayRepository.ts';
 import type { IntradayCollector } from '../market/intradayCollector.ts';
-import type { TickStore } from '../ticks/types.ts';
+import type { TickPricer } from '../ticks/types.ts';
 import { countFills, makeFillPrice, type MinuteFetcher } from './fills.ts';
 import { simulate, type DecideContext } from './engine.ts';
 import { computeMetrics, totalReturnOf } from './metrics.ts';
@@ -22,7 +22,7 @@ export interface RunnerDeps {
   readonly model: string;
   readonly intraday: IntradayRepository;
   readonly collector: IntradayCollector;
-  readonly ticks: TickStore | null;
+  readonly ticks: TickPricer | null;
   readonly cryptoMinutes: MinuteFetcher;
   readonly participation: number;
 }
