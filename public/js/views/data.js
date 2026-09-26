@@ -7,7 +7,11 @@ const INTERVAL_LABEL = { '1m': '1분봉', '5m': '5분봉', '60m': '60분봉' };
 const gb = (b) => `${(b / 1e9).toFixed(2)}GB`;
 
 function tickSection(info) {
-  if (!info.enabled) return '<div class="empty">이 서버에서는 원본 틱 저장소를 쓸 수 없습니다 (로컬 서버 전용).</div>';
+  if (!info.enabled) {
+    return meta().tickMode === 'stream'
+      ? '<div class="empty">이 서버는 원본 틱을 저장하지 않습니다. 틱 체결을 고르면 체결일의 바이낸스 체결 파일을 그때그때 받아 계산하고, 결과만 저장합니다.</div>'
+      : '<div class="empty">이 서버에서는 원본 틱을 쓸 수 없습니다.</div>';
+  }
   const pct = info.maxBytes > 0 ? Math.min(100, (info.sizeBytes / info.maxBytes) * 100) : 0;
   const rows = info.coverage.length === 0 ? '<div class="empty">아직 수집된 틱이 없습니다.</div>'
     : `<div class="table-wrap"><table><thead><tr><th>코인</th><th class="num">일수</th><th class="num">체결 건수</th><th>시작</th><th>마지막</th></tr></thead>

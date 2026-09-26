@@ -4,12 +4,16 @@ import { CONFIG } from '../config.ts';
 import { openRemoteDatabase } from '../db/client.web.ts';
 import { createApp, type App } from '../app.ts';
 import { logger } from '../logger.ts';
+import { StreamingTickPricer } from '../ticks/streamingTickPricer.ts';
+import { TickFillCacheRepository } from '../db/tickFillCacheRepository.ts';
 
 let appPromise: Promise<App> | null = null;
 
 /** 인스턴스당 한 번만 DB 연결·스키마 확인 (웜 스타트 시 재사용) */
 function getApp(): Promise<App> {
-  appPromise ??= openRemoteDatabase(CONFIG.tursoUrl, CONFIG.tursoToken).then((db) => createApp({ db }));
+  // 서버리스는 원본 틱을 저장하지 않고 체결일마다 스트리밍으로 계산 (결과만 DB 캐시)
+  appPromise ??= openRemoteDatabase(CONFIG.tursoUrl, CONFIG.tursoToken)
+    .then((db) => createApp({ db, tickPricer: CONFIG.ticks.enabled ? new StreamingTickPricer(new TickFillCacheRepository(db)) : null }));
   return appPromise;
 }
 

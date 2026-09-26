@@ -13,7 +13,8 @@ import type { JevClient } from './jev/types.ts';
 import { executeRun } from './backtest/runner.ts';
 import { RunQueue } from './backtest/queue.ts';
 import { createRouter, type RequestHandler } from './api/router.ts';
-import type { TickStore } from './ticks/types.ts';
+import type { TickPricer, TickStore } from './ticks/types.ts';
+import { localTickPricer } from './ticks/localTickPricer.ts';
 import type { MinuteFetcher } from './backtest/fills.ts';
 import { CRYPTO_ASSETS, fetchBinanceMinutes } from './market/binance.ts';
 import { logger } from './logger.ts';
@@ -25,6 +26,8 @@ export interface AppOptions {
   readonly intradayFetcher?: IntradayFetcher;
   /** 원본 틱 저장소 (로컬 전용, 서버리스에서는 null) */
   readonly ticks?: TickStore | null;
+  /** 틱 체결가 계산기. 생략하면 저장소가 있을 때 로컬 방식, 없으면 틱 체결 비활성 */
+  readonly tickPricer?: TickPricer | null;
   readonly cryptoMinutes?: MinuteFetcher;
   readonly rateLimit?: { readonly maxCreates: number; readonly windowMs: number };
 }
@@ -62,9 +65,10 @@ export function createApp(opts: AppOptions): App {
     return live;
   };
   const ticks = opts.ticks ?? null;
+  const tickPricer = opts.tickPricer !== undefined ? opts.tickPricer : ticks ? localTickPricer(ticks) : null;
   const cryptoMinutes = opts.cryptoMinutes ?? ((symbol, from, to) => fetchBinanceMinutes(symbol, from, to));
   const queue = new RunQueue(runs, (id) => executeRun(id, {
-    prices, runs, jevFor, model: CONFIG.jev.model, intraday, collector, ticks, cryptoMinutes, participation: CONFIG.ticks.participation,
+    prices, runs, jevFor, model: CONFIG.jev.model, intraday, collector, ticks: tickPricer, cryptoMinutes, participation: CONFIG.ticks.participation,
   }), CONFIG.maxConcurrentRuns);
   // Yahoo 분봉 주기 수집 대상은 주식만 (코인은 체결일마다 바이낸스에서 받는다)
   const trackedSymbols = async () => [
@@ -92,6 +96,6 @@ export function createApp(opts: AppOptions): App {
     const tickDays = await collectYesterdayTicks();
     return { requeued: ids.length, collected, tickDays };
   };
-  const handle = createRouter({ runs, queue, jevLive: live !== null, publicDir: CONFIG.publicDir, intraday, collector, prices, onCron: tick, ticks, rateLimit: opts.rateLimit });
+  const handle = createRouter({ runs, queue, jevLive: live !== null, publicDir: CONFIG.publicDir, intraday, collector, prices, onCron: tick, ticks, tickPricer, rateLimit: opts.rateLimit });
   return { handle, queue, runs, collector, trackedSymbols, tick, collectYesterdayTicks };
 }
